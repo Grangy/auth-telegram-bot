@@ -14,7 +14,11 @@
     "db:init:cleanup": "node src/scripts/init-db.js --cleanup",
     "db:studio": "prisma studio",
     "setup": "npm run db:generate && npm run db:push && npm run db:init",
-    "help": "echo 'Доступные команды:' && echo 'npm start - запуск сервера' && echo 'npm run dev - разработка' && echo 'npm run setup - полная настройка БД' && echo 'npm run db:init - инициализация БД' && echo 'npm run db:push - синхронизация БД' && echo 'npm run db:studio - просмотр БД'"
+    "health": "node scripts/health-check.js",
+    "restart": "node scripts/restart-server.js",
+    "monitor": "while true; do npm run health; sleep 5; done",
+    "test:sms": "node scripts/test-sms-codes.js",
+    "help": "echo 'Доступные команды:' && echo 'npm start - запуск сервера' && echo 'npm run dev - разработка' && echo 'npm run setup - полная настройка БД' && echo 'npm run db:init - инициализация БД' && echo 'npm run db:push - синхронизация БД' && echo 'npm run db:studio - просмотр БД' && echo 'npm run health - проверка здоровья' && echo 'npm run restart - безопасный перезапуск' && echo 'npm run monitor - мониторинг'"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",

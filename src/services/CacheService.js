@@ -82,9 +82,11 @@ class CacheService {
         return this.get(key);
     }
 
-    async setSmsCode(phone, code, ttl = 300) { // 5 минут
+    async setSmsCode(phone, smsData, ttl = 300) { // 5 минут
         const key = `sms_code:${phone}`;
-        return this.set(key, { code, timestamp: Date.now() }, ttl);
+        // smsData может быть объектом с {code, socketId, expiresAt} или просто строкой кода
+        const data = typeof smsData === 'object' ? smsData : { code: smsData, timestamp: Date.now() };
+        return this.set(key, data, ttl);
     }
 
     async deleteSmsCode(phone) {
@@ -172,6 +174,13 @@ class CacheService {
         return true;
     }
 
+    // Полная очистка кэша (alias для flush)
+    async clearAll() {
+        this.cache.clear();
+        logger.info('✅ Кэш полностью очищен');
+        return true;
+    }
+
     // Cleanup expired entries
     cleanupExpiredEntries() {
         const now = Date.now();
@@ -236,6 +245,7 @@ class CacheService {
     }
 
     async invalidateSmsCode(phone) {
+        logger.debug(`Инвалидация SMS кода для номера: ${phone}`);
         return this.deleteSmsCode(phone);
     }
 

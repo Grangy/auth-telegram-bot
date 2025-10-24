@@ -87,7 +87,11 @@ app.get('/health', async (req, res) => {
         // Проверка базы данных
         try {
             if (prismaService) {
-                await prismaService.$queryRaw`SELECT 1`;
+                // Для MongoDB используем findFirst вместо $queryRaw
+                await prismaService.prisma.user.findFirst({ 
+                    take: 1,
+                    select: { id: true }
+                });
                 health.services.database = true;
             } else {
                 health.services.database = false;
@@ -134,20 +138,23 @@ function normalizePhoneNumber(phone) {
     // Удаляем все символы кроме цифр и +
     let cleaned = phone.replace(/[^\d+]/g, '');
     
+    // Логируем исходный номер для отладки
+    logger.debug(`Нормализация номера: "${phone}" -> "${cleaned}"`);
+    
     // Обработка российских номеров - все варианты
-    if (cleaned.startsWith('8')) {
+    if (cleaned.startsWith('8') && cleaned.length === 11) {
         // 8XXXXXXXXXX -> +7XXXXXXXXXX
         cleaned = '+7' + cleaned.substring(1);
-    } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7')) {
+    } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7') && cleaned.length === 11) {
         // 7XXXXXXXXXX -> +7XXXXXXXXXX
         cleaned = '+' + cleaned;
-    } else if (cleaned.startsWith('+7')) {
+    } else if (cleaned.startsWith('+7') && cleaned.length === 12) {
         // +7XXXXXXXXXX -> остается как есть
         cleaned = cleaned;
-    } else if (cleaned.startsWith('9') && cleaned.length >= 10) {
+    } else if (cleaned.startsWith('9') && cleaned.length === 10) {
         // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
         cleaned = '+7' + cleaned;
-    } else if (cleaned.startsWith('978') && cleaned.length >= 10) {
+    } else if (cleaned.startsWith('978') && cleaned.length === 11) {
         // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
         cleaned = '+' + cleaned;
     } else if (cleaned.length > 0 && !cleaned.startsWith('+')) {
@@ -155,6 +162,14 @@ function normalizePhoneNumber(phone) {
         cleaned = '+' + cleaned;
     }
     
+    // Финальная валидация российского номера
+    if (cleaned.startsWith('+7') && cleaned.length === 12) {
+        logger.debug(`Нормализованный номер: "${cleaned}"`);
+        return cleaned;
+    }
+    
+    // Если номер не соответствует российскому формату, возвращаем как есть
+    logger.warn(`Номер не соответствует российскому формату: "${phone}" -> "${cleaned}"`);
     return cleaned;
 }
 
@@ -316,14 +331,16 @@ io.on('connection', (socket) => {
                 return;
             }
             
-            logger.info(`Запрос авторизации для номера: ${phone}`);
+            // Нормализуем номер телефона
+            const normalizedPhone = normalizePhoneNumber(phone);
+            logger.info(`Запрос авторизации для номера: ${normalizedPhone}`);
             
             // Проверяем кэш пользователя
-            let user = await cacheService.getUserByPhone(phone);
+            let user = await cacheService.getUserByPhone(normalizedPhone);
             
             if (!user) {
                 // Если нет в кэше, ищем в базе данных
-                user = await prismaService.findUserByPhone(phone);
+                user = await prismaService.findUserByPhone(normalizedPhone);
                 
                 if (user) {
                     // Прогреваем кэш
@@ -338,14 +355,14 @@ io.on('connection', (socket) => {
                 
                 // Сохраняем код в базу данных
                 await prismaService.createSmsCode({
-                    phone: phone,
+                    phone: normalizedPhone,
                     code: smsCode,
                     socketId: socket.id,
                     expiresAt: expiresAt
                 });
                 
                 // Кэшируем код
-                await cacheService.setSmsCode(phone, {
+                await cacheService.setSmsCode(normalizedPhone, {
                     code: smsCode,
                     socketId: socket.id,
                     expiresAt: expiresAt
@@ -358,7 +375,7 @@ io.on('connection', (socket) => {
                     `Введите этот код на сайте для входа в систему.`
                 );
                 
-                socket.emit('smsCodeSent', { phone });
+                socket.emit('smsCodeSent', { phone: normalizedPhone });
                 logger.info(`SMS код отправлен существующему пользователю ${user.telegramUserId}: ${smsCode}`);
                 return;
             }
@@ -370,14 +387,14 @@ io.on('connection', (socket) => {
             // Сохраняем ключ авторизации в базу данных
             await prismaService.createAuthKey({
                 key: authKey,
-                phone: phone,
+                phone: normalizedPhone,
                 socketId: socket.id,
                 expiresAt: expiresAt
             });
             
             // Кэшируем ключ
             await cacheService.setAuthKey(authKey, {
-                phone: phone,
+                phone: normalizedPhone,
                 socketId: socket.id,
                 expiresAt: expiresAt
             });
@@ -386,7 +403,7 @@ io.on('connection', (socket) => {
             const sessionExpiresAt = new Date(Date.now() + config.session.maxAge);
             await prismaService.createSession({
                 socketId: socket.id,
-                phone: phone,
+                phone: normalizedPhone,
                 authorized: false,
                 expiresAt: sessionExpiresAt
             });
@@ -429,36 +446,80 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // Нормализуем номер телефона
+            const normalizedPhone = normalizePhoneNumber(phone);
+            logger.info(`Проверка кода для номера: ${normalizedPhone}, код: ${code}`);
+
             // Проверяем кэш SMS кода
-            let codeData = await cacheService.getSmsCode(phone);
+            let codeData = await cacheService.getSmsCode(normalizedPhone);
+            logger.debug(`Данные из кэша для ${normalizedPhone}:`, codeData);
             
             if (!codeData) {
                 // Если нет в кэше, ищем в базе данных
-                codeData = await prismaService.findSmsCode(phone);
+                logger.debug(`Код не найден в кэше, ищем в БД для ${normalizedPhone}`);
+                codeData = await prismaService.findSmsCode(normalizedPhone);
+                logger.debug(`Данные из БД для ${normalizedPhone}:`, codeData);
             }
             
-            if (!codeData || codeData.used || codeData.code !== code) {
-                socket.emit('authError', { message: 'Неверный код' });
+            if (!codeData) {
+                logger.warn(`SMS код не найден для номера: ${normalizedPhone}`);
+                socket.emit('authError', { message: 'Код не найден. Запросите новый код.' });
+                return;
+            }
+
+            if (codeData.used) {
+                logger.warn(`SMS код уже использован для номера: ${normalizedPhone}`);
+                socket.emit('authError', { message: 'Код уже использован. Запросите новый код.' });
                 return;
             }
 
             // Проверяем, не устарел ли код
             if (new Date() > codeData.expiresAt) {
-                socket.emit('authError', { message: 'Код устарел' });
+                logger.warn(`SMS код устарел для номера: ${normalizedPhone}`);
+                socket.emit('authError', { message: 'Код устарел. Запросите новый код.' });
                 return;
             }
 
+            // Проверяем соответствие кода
+            logger.debug(`Сравнение кодов для ${normalizedPhone}:`, {
+                expected: codeData.code,
+                received: code,
+                expectedType: typeof codeData.code,
+                receivedType: typeof code,
+                areEqual: codeData.code === code,
+                strictEqual: codeData.code === code
+            });
+            
+            // Нормализуем введенный код (убираем пробелы, переводы строк)
+            const normalizedCode = code.toString().trim();
+            const normalizedExpectedCode = codeData.code.toString().trim();
+            
+            logger.debug(`Нормализованное сравнение:`, {
+                expected: normalizedExpectedCode,
+                received: normalizedCode,
+                areEqual: normalizedExpectedCode === normalizedCode
+            });
+            
+            if (normalizedExpectedCode !== normalizedCode) {
+                logger.warn(`Неверный код для номера: ${normalizedPhone}. Ожидался: "${normalizedExpectedCode}", получен: "${normalizedCode}"`);
+                socket.emit('authError', { message: 'Неверный код' });
+                return;
+            }
+
+            logger.info(`Код верный для номера: ${normalizedPhone}`);
+
             // Код верный, помечаем как использованный
-            await prismaService.markSmsCodeAsUsed(phone);
-            await cacheService.invalidateSmsCode(phone);
+            await prismaService.markSmsCodeAsUsed(normalizedPhone);
+            await cacheService.invalidateSmsCode(normalizedPhone);
 
             // Находим пользователя
-            let user = await cacheService.getUserByPhone(phone);
+            let user = await cacheService.getUserByPhone(normalizedPhone);
             if (!user) {
-                user = await prismaService.findUserByPhone(phone);
+                user = await prismaService.findUserByPhone(normalizedPhone);
             }
             
             if (!user) {
+                logger.error(`Пользователь не найден для номера: ${normalizedPhone}`);
                 socket.emit('authError', { message: 'Пользователь не найден' });
                 return;
             }
@@ -466,7 +527,7 @@ io.on('connection', (socket) => {
             // Создаем новую сессию
             const sessionExpiresAt = new Date(Date.now() + config.session.maxAge);
             await prismaService.updateSession(socket.id, {
-                phone: phone,
+                phone: normalizedPhone,
                 authorized: true,
                 name: user.name,
                 telegramUserId: user.telegramUserId,
@@ -475,7 +536,7 @@ io.on('connection', (socket) => {
 
             // Создаем долгосрочную сессию
             const userData = {
-                phone: phone,
+                phone: normalizedPhone,
                 name: user.name,
                 telegramUserId: user.telegramUserId
             };
@@ -488,12 +549,12 @@ io.on('connection', (socket) => {
 
             // Уведомляем клиент об успешной авторизации
             socket.emit('authSuccess', {
-                phone: phone,
+                phone: normalizedPhone,
                 name: user.name,
                 sessionToken: longTermSessionData.token
             });
 
-            logger.info(`Пользователь ${phone} успешно авторизован`);
+            logger.info(`Пользователь ${normalizedPhone} успешно авторизован`);
 
         } catch (error) {
             logger.error('Ошибка в verifyCode:', error);
@@ -695,11 +756,13 @@ function setupTelegramHandlers() {
         try {
             // Нормализуем номер телефона (поддержка всех вариантов российских номеров)
             const normalizedPhone = normalizePhoneNumber(contact.phone_number);
+            logger.info(`Нормализованный номер из контакта: ${normalizedPhone}`);
             
             // Ищем активные запросы авторизации для этого номера
             const activeAuthKeys = await prismaService.findActiveAuthKeysByPhone(normalizedPhone);
             
             if (!activeAuthKeys || activeAuthKeys.length === 0) {
+                logger.warn(`Не найдено активных запросов авторизации для номера: ${normalizedPhone}`);
                 await bot.sendMessage(userId, 
                     `❌ Не найдено активных запросов авторизации для номера ${normalizedPhone}.\n\n` +
                     `Убедитесь, что:\n` +
@@ -709,6 +772,8 @@ function setupTelegramHandlers() {
                 );
                 return;
             }
+            
+            logger.info(`Найдено ${activeAuthKeys.length} активных ключей для номера: ${normalizedPhone}`);
             
             // Берем первый активный ключ
             const authKey = activeAuthKeys[0];
@@ -935,25 +1000,89 @@ process.on('unhandledRejection', (reason, promise) => {
     errorHandler.handleCriticalError(reason, 'unhandledRejection');
 });
 
-// Обработка завершения процесса
-process.on('SIGINT', async () => {
-    logger.info('🛑 Завершение работы сервера...');
+// Флаг для предотвращения множественных выключений
+let isShuttingDown = false;
+
+// Безопасное выключение сервера
+async function gracefulShutdown(signal) {
+    if (isShuttingDown) {
+        logger.warn('🔄 Попытка повторного выключения, игнорируем...');
+        return;
+    }
+    
+    isShuttingDown = true;
+    logger.info(`🛑 Получен сигнал ${signal}. Начинаем безопасное выключение сервера...`);
+    
+    const shutdownTimeout = setTimeout(() => {
+        logger.error('⏰ Таймаут выключения. Принудительное завершение...');
+        process.exit(1);
+    }, 30000); // 30 секунд на выключение
+    
     try {
-        if (telegramService) {
-            telegramService.stopPolling();
-        }
-        if (prismaService) {
-            await prismaService.disconnect();
-        }
+        // 1. Останавливаем прием новых подключений
+        logger.info('📡 Останавливаем прием новых подключений...');
         server.close(() => {
-            logger.info('✅ Сервер остановлен');
-            process.exit(0);
+            logger.info('✅ HTTP сервер остановлен');
         });
+        
+        // 2. Закрываем все WebSocket соединения
+        logger.info('🔌 Закрываем WebSocket соединения...');
+        
+        // Уведомляем всех клиентов о выключении сервера
+        io.emit('serverShutdown', { 
+            message: 'Сервер выключается. Пожалуйста, переподключитесь через несколько секунд.',
+            timestamp: new Date().toISOString()
+        });
+        
+        // Даем время клиентам получить уведомление
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Закрываем все соединения
+        io.disconnectSockets();
+        io.close(() => {
+            logger.info('✅ WebSocket сервер остановлен');
+        });
+        
+        // 3. Останавливаем Telegram бота
+        if (telegramService) {
+            logger.info('🤖 Останавливаем Telegram бота...');
+            telegramService.stopPolling();
+            logger.info('✅ Telegram бот остановлен');
+        }
+        
+        // 4. Закрываем соединения с базой данных
+        if (prismaService) {
+            logger.info('🗄️ Закрываем соединения с базой данных...');
+            await prismaService.disconnect();
+            logger.info('✅ Соединения с БД закрыты');
+        }
+        
+        // 5. Очищаем кэш
+        if (cacheService) {
+            logger.info('🧹 Очищаем кэш...');
+            try {
+                await cacheService.clearAll();
+                logger.info('✅ Кэш очищен');
+            } catch (error) {
+                logger.warn('⚠️ Ошибка очистки кэша:', error.message);
+            }
+        }
+        
+        clearTimeout(shutdownTimeout);
+        logger.info('✅ Безопасное выключение завершено');
+        process.exit(0);
+        
     } catch (error) {
-        logger.error('Ошибка при завершении работы:', error);
+        logger.error('❌ Ошибка при безопасном выключении:', error);
+        clearTimeout(shutdownTimeout);
         process.exit(1);
     }
-});
+}
+
+// Обработка различных сигналов завершения
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));   // Ctrl+C
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // kill команда
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
 
 // Запускаем сервер
 startServer();

@@ -142,24 +142,36 @@
             <div>
                 <label class="block text-lg font-semibold text-white mb-4">📱 Номер телефона</label>
                 
-                <!-- Красивый input для номера -->
+                <!-- Красивый input для номера с маской -->
                 <div class="relative">
                     <input 
                         type="tel" 
                         id="phoneInput" 
-                        placeholder="+7 (999) 123-45-67"
+                        placeholder="+7 (___) ___-__-__"
                         class="phone-input w-full px-6 py-4 text-lg rounded-2xl text-white placeholder-gray-400 focus:outline-none"
                         maxlength="20"
                         autocomplete="tel"
                         inputmode="tel"
+                        pattern="^\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}$"
+                        title="Формат: +7 (999) 123-45-67"
                     >
-                    <div class="absolute inset-y-0 right-0 flex items-center pr-4">
-                        <span class="text-gray-400 text-sm">📱</span>
-                    </div>
+                    <button 
+                        id="clearPhoneBtn" 
+                        type="button" 
+                        class="absolute inset-y-0 right-2 my-auto rounded-lg px-2 text-sm text-gray-400 hover:bg-gray-600/30 hover:text-white transition-all duration-200"
+                        title="Очистить поле"
+                    >
+                        ✕
+                    </button>
                 </div>
                 
                 <p class="text-xs text-gray-400 mt-2">
-                    Поддерживаются форматы: +7 (999) 123-45-67, 8 999 123 45 67, 79991234567
+                    Поддерживаются любые из: <code>+7 (999) 123-45-67</code>, <code>8 999 123 45 67</code>, <code>79991234567</code>.
+                    Ввод автоматически приводится к формату <strong>+7 (___) ___-__-__</strong>.
+                </p>
+                
+                <p class="text-xs text-gray-500 mt-1">
+                    Подсказка: вставьте сразу <code>89991234567</code> или <code>79991234567</code> — формат применится автоматически.
                 </p>
             </div>
             
@@ -290,76 +302,114 @@
         // Store current auth link
         let currentAuthLink = '';
         
-        // Advanced phone number formatting and validation
-        class PhoneHandler {
+        // Продвинутая маска телефона с живым форматированием
+        class PhoneMaskHandler {
             constructor() {
-                this.phonePatterns = {
-                    russia: /^(\+7|7|8)?[\s\-]?\(?(\d{3})\)?[\s\-]?(\d{3})[\s\-]?(\d{2})[\s\-]?(\d{2})$/,
-                    international: /^\+?[1-9]\d{1,14}$/
-                };
+                this.lastLength = 0;
             }
 
-            // Normalize phone number to international format
+            // Утилиты
+            onlyDigits = (s) => (s || "").replace(/\D/g, "");
+            clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+            // Преобразуем набор цифр к формату +7 (XXX) XXX-XX-XX (показываем маску при неполном вводе)
+            formatAsRuPhone(rawDigits) {
+                if (!rawDigits) return "+7 (___) ___-__-__";
+
+                // 1) нормализуем первую цифру к '7'
+                let d = this.onlyDigits(rawDigits);
+
+                // Если пользователь начал с 8 — заменяем на 7
+                if (d[0] === "8") d = "7" + d.slice(1);
+
+                // Если начал с 9 (часто так вводят мобильные) — добавим ведущую 7
+                if (d[0] === "9") d = "7" + d;
+
+                // Если начал не с 7 — принудительно ставим 7 впереди
+                if (d[0] && d[0] !== "7") d = "7" + d.slice(1);
+
+                // Ограничим максимум 11 цифрами (7 + 10)
+                d = d.slice(0, 11);
+
+                // Отделим части
+                const country = "+7";
+                const rest = d[0] === "7" ? d.slice(1) : d; // без ведущей 7
+
+                const a = rest.slice(0, 3);
+                const b = rest.slice(3, 6);
+                const c = rest.slice(6, 8);
+                const e = rest.slice(8, 10);
+
+                // Строим строку с плейсхолдерами
+                const A = a.padEnd(3, "_");
+                const B = b.padEnd(3, "_");
+                const C = c.padEnd(2, "_");
+                const E = e.padEnd(2, "_");
+
+                return `${country} (${A}) ${B}-${C}-${E}`;
+            }
+
+            // Версия без плейсхолдеров — итоговый «чистый» формат
+            formatAsRuPhoneTight(rawDigits) {
+                let d = this.onlyDigits(rawDigits);
+                if (d[0] === "8") d = "7" + d.slice(1);
+                if (d[0] === "9") d = "7" + d;
+                if (d[0] && d[0] !== "7") d = "7" + d.slice(1);
+                d = d.slice(0, 11);
+
+                const country = "+7";
+                const rest = d[0] === "7" ? d.slice(1) : d;
+
+                const a = rest.slice(0, 3);
+                const b = rest.slice(3, 6);
+                const c = rest.slice(6, 8);
+                const e = rest.slice(8, 10);
+
+                let out = `${country}`;
+                if (a) out += ` (${a}`;
+                if (a.length === 3) out += `)`;
+                if (b) out += ` ${b}`;
+                if (c) out += `-${c}`;
+                if (e) out += `-${e}`;
+
+                return out;
+            }
+
+            // Подсчёт позиции каретки относительно количества введённых цифр
+            getDigitsCountUpTo(text, caretIndex) {
+                return this.onlyDigits(text.slice(0, caretIndex)).length;
+            }
+
+            caretFromDigitIndex(formattedText, digitIndex) {
+                // Пройдём по строке и найдём позицию, после которой будет digitIndex цифр
+                if (digitIndex <= 0) return 0;
+                let count = 0;
+                for (let i = 0; i < formattedText.length; i++) {
+                    if (/\d/.test(formattedText[i])) {
+                        count++;
+                        if (count === digitIndex) {
+                            // Ставим каретку сразу ПОСЛЕ этой цифры
+                            return i + 1;
+                        }
+                    }
+                }
+                return formattedText.length;
+            }
+
+            // Нормализация телефона для валидации
             normalizePhone(phone) {
                 if (!phone) return '';
                 
-                // Remove all non-digits except +
-                let cleaned = phone.replace(/[^\d+]/g, '');
+                let d = this.onlyDigits(phone);
+                if (d[0] === "8") d = "7" + d.slice(1);
+                if (d[0] === "9") d = "7" + d;
+                if (d[0] && d[0] !== "7") d = "7" + d.slice(1);
+                d = d.slice(0, 11);
                 
-                // Handle Russian numbers - все варианты
-                if (cleaned.startsWith('8')) {
-                    // 8XXXXXXXXXX -> +7XXXXXXXXXX
-                    cleaned = '+7' + cleaned.substring(1);
-                } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7')) {
-                    // 7XXXXXXXXXX -> +7XXXXXXXXXX
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('+7')) {
-                    // +7XXXXXXXXXX -> остается как есть
-                    cleaned = cleaned;
-                } else if (cleaned.startsWith('9') && cleaned.length >= 10) {
-                    // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
-                    cleaned = '+7' + cleaned;
-                } else if (cleaned.startsWith('978') && cleaned.length >= 10) {
-                    // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.length > 0 && !cleaned.startsWith('+')) {
-                    // Любой другой номер -> добавляем +
-                    cleaned = '+' + cleaned;
-                }
-                
-                return cleaned;
+                return d.length === 11 ? '+7' + d.slice(1) : '';
             }
 
-            // Format phone for display
-            formatPhoneDisplay(phone) {
-                const normalized = this.normalizePhone(phone);
-                
-                if (!normalized) return '';
-                
-                // Russian format: +7 (XXX) XXX-XX-XX
-                if (normalized.startsWith('+7') && normalized.length === 12) {
-                    const digits = normalized.substring(2);
-                    return `+7 (${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6, 8)}-${digits.substring(8, 10)}`;
-                }
-                
-                // International format: +XX XXX XXX XXXX
-                if (normalized.startsWith('+') && normalized.length >= 8) {
-                    const countryCode = normalized.substring(1, 3);
-                    const number = normalized.substring(3);
-                    
-                    if (number.length <= 3) {
-                        return `+${countryCode} ${number}`;
-                    } else if (number.length <= 6) {
-                        return `+${countryCode} ${number.substring(0, 3)} ${number.substring(3)}`;
-                    } else {
-                        return `+${countryCode} ${number.substring(0, 3)} ${number.substring(3, 6)} ${number.substring(6)}`;
-                    }
-                }
-                
-                return normalized;
-            }
-
-            // Validate phone number
+            // Валидация телефона
             validatePhone(phone) {
                 const normalized = this.normalizePhone(phone);
                 
@@ -367,179 +417,96 @@
                     return { valid: false, error: 'Номер телефона не указан' };
                 }
                 
-                if (normalized.length < 8) {
-                    return { valid: false, error: 'Номер слишком короткий' };
-                }
-                
-                if (normalized.length > 16) {
-                    return { valid: false, error: 'Номер слишком длинный' };
-                }
-                
-                if (!normalized.startsWith('+')) {
-                    return { valid: false, error: 'Номер должен начинаться с +' };
-                }
-                
-                // Специальная проверка для российских номеров
-                if (normalized.startsWith('+7')) {
-                    // Российский номер должен быть +7XXXXXXXXXX (12 символов)
-                    if (normalized.length !== 12) {
-                        return { valid: false, error: 'Российский номер должен содержать 10 цифр после +7' };
-                    }
-                    // Проверяем, что после +7 идет валидный код оператора
-                    const operatorCode = normalized.substring(2, 5);
-                    if (!['900', '901', '902', '903', '904', '905', '906', '908', '909', '910', '911', '912', '913', '914', '915', '916', '917', '918', '919', '920', '921', '922', '923', '924', '925', '926', '927', '928', '929', '930', '931', '932', '933', '934', '935', '936', '937', '938', '939', '950', '951', '952', '953', '954', '955', '956', '957', '958', '959', '960', '961', '962', '963', '964', '965', '966', '967', '968', '969', '970', '971', '972', '973', '974', '975', '976', '977', '978', '979', '980', '981', '982', '983', '984', '985', '986', '987', '988', '989', '991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(operatorCode)) {
-                        return { valid: false, error: 'Неверный код оператора для российского номера' };
-                    }
-                }
-                
-                // Check for valid country code
-                const countryCode = normalized.substring(1, 3);
-                if (countryCode.length < 1 || countryCode.length > 3) {
-                    return { valid: false, error: 'Неверный код страны' };
+                if (normalized.length !== 12) {
+                    return { valid: false, error: 'Российский номер должен содержать 10 цифр после +7' };
                 }
                 
                 return { valid: true, normalized };
             }
-
-            // Format phone as user types with live normalization
-            formatPhoneInput(value) {
-                if (!value) return '';
-                
-                // Remove all non-digits except +
-                let cleaned = value.replace(/[^\d+]/g, '');
-                
-                // Handle backspace - don't add formatting if user is deleting
-                if (cleaned.length < this.lastLength) {
-                    this.lastLength = cleaned.length;
-                    return cleaned;
-                }
-                
-                this.lastLength = cleaned.length;
-                
-                // Live normalization after 4 characters
-                if (cleaned.length >= 4) {
-                    const beforeNormalization = cleaned;
-                    cleaned = this.liveNormalizePhone(cleaned);
-                    console.log('🔄 Live normalization:', { before: beforeNormalization, after: cleaned });
-                }
-                
-                // Format for display
-                return this.formatPhoneDisplay(cleaned);
-            }
-            
-            // Live phone normalization after 4 characters
-            liveNormalizePhone(phone) {
-                if (!phone) return '';
-                
-                // Remove all non-digits except +
-                let cleaned = phone.replace(/[^\d+]/g, '');
-                
-                console.log('🔍 Live normalization check:', { original: phone, cleaned, length: cleaned.length });
-                
-                // Явные проверки для российских номеров
-                if (cleaned.startsWith('8') && cleaned.length >= 4) {
-                    // 8XXXXXXXXXX -> +7XXXXXXXXXX
-                    console.log('✅ 8 -> +7 normalization');
-                    cleaned = '+7' + cleaned.substring(1);
-                } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7') && cleaned.length >= 4) {
-                    // 7XXXXXXXXXX -> +7XXXXXXXXXX
-                    console.log('✅ 7 -> +7 normalization');
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('978') && cleaned.length >= 4) {
-                    // 978XXXXXXXX -> +7978XXXXXXXX
-                    console.log('✅ 978 -> +7978 normalization');
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('97') && cleaned.length >= 4) {
-                    // 97XXXXXXXX -> +797XXXXXXXX
-                    console.log('✅ 97 -> +797 normalization');
-                    cleaned = '+7' + cleaned;
-                } else if (cleaned.startsWith('9') && cleaned.length >= 4) {
-                    // 9XXXXXXXXX -> +79XXXXXXXXX
-                    console.log('✅ 9 -> +79 normalization');
-                    cleaned = '+7' + cleaned;
-                } else if (cleaned.length >= 4 && !cleaned.startsWith('+')) {
-                    // Любой другой номер -> добавляем +
-                    console.log('✅ Adding + prefix');
-                    cleaned = '+' + cleaned;
-                }
-                
-                console.log('🎯 Normalization result:', { original: phone, result: cleaned });
-                return cleaned;
-            }
         }
 
-        // Initialize phone handler
-        const phoneHandler = new PhoneHandler();
+        // Initialize phone mask handler
+        const phoneMaskHandler = new PhoneMaskHandler();
+        const clearPhoneBtn = document.getElementById('clearPhoneBtn');
         
-        // Format phone input with advanced handler and live normalization
-        phoneInput.addEventListener('input', (e) => {
-            const originalValue = e.target.value;
-            console.log('📝 Input event:', { original: originalValue, length: originalValue.length });
-            
-            const formatted = phoneHandler.formatPhoneInput(originalValue);
-            console.log('🔄 Format result:', { original: originalValue, formatted });
-            
-            // Check if normalization occurred
-            if (formatted !== originalValue && formatted.length >= 4) {
-                console.log('🎯 Normalization detected:', { original: originalValue, formatted });
-                // Show normalization indicator
-                showNormalizationIndicator(originalValue, formatted);
+        // Инициализация поля телефона
+        phoneInput.value = "";
+        phoneInput.placeholder = "+7 (___) ___-__-__";
+
+        // Блокируем любые нечисловые символы (кроме служебных клавиш)
+        phoneInput.addEventListener("keydown", (e) => {
+            const allowed =
+                e.ctrlKey || e.metaKey || e.altKey ||
+                ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End", "Tab"].includes(e.key);
+
+            if (allowed) return;
+
+            if (!/\d/.test(e.key)) {
+                e.preventDefault();
+                return;
             }
-            
-            e.target.value = formatted;
+
+            // Если уже введено 11 цифр — не даём вводить больше
+            const currentDigits = phoneMaskHandler.onlyDigits(phoneInput.value);
+            if (currentDigits.length >= 11) {
+                e.preventDefault();
+            }
+        });
+
+        // Живое форматирование при вводе/вставке
+        const applyMask = () => {
+            const prev = phoneInput.value;
+            const start = phoneInput.selectionStart || 0;
+
+            const digitIndexBefore = phoneMaskHandler.getDigitsCountUpTo(prev, start);
+            const tight = phoneMaskHandler.formatAsRuPhoneTight(prev);
+            const withMask = phoneMaskHandler.formatAsRuPhone(prev); // с плейсхолдерами
+
+            // Показываем плейсхолдеры, пока номер неполный
+            const rawDigits = phoneMaskHandler.onlyDigits(prev).slice(0, 11);
+            const complete = rawDigits.length === 11;
+
+            phoneInput.value = complete ? tight : withMask;
+
+            // Восстановим каретку по количеству цифр до неё
+            const newCaret = phoneMaskHandler.caretFromDigitIndex(phoneInput.value, digitIndexBefore);
+            phoneInput.setSelectionRange(newCaret, newCaret);
+        };
+
+        phoneInput.addEventListener("input", applyMask);
+        phoneInput.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const pasted = (e.clipboardData || window.clipboardData).getData("text");
+            const digits = phoneMaskHandler.onlyDigits(pasted);
+            // Вставим очищенные цифры в текущее место
+            const start = phoneInput.selectionStart || 0;
+            const end = phoneInput.selectionEnd || 0;
+            const before = phoneInput.value.slice(0, start);
+            const after  = phoneInput.value.slice(end);
+            phoneInput.value = before + digits + after;
+            applyMask();
+        });
+
+        // Кнопка очистки
+        clearPhoneBtn.addEventListener("click", () => {
+            phoneInput.value = "";
+            phoneInput.focus();
+        });
+
+        // На blur — если номер полный, оставим «чистый» формат; если нет — очистим
+        phoneInput.addEventListener("blur", () => {
+            const d = phoneMaskHandler.onlyDigits(phoneInput.value);
+            if (d.length === 0) return;
+            if (d.length < 11) {
+                phoneInput.value = "";
+            } else {
+                phoneInput.value = phoneMaskHandler.formatAsRuPhoneTight(d);
+            }
         });
         
-        // Show normalization indicator with smart messaging
-        function showNormalizationIndicator(original, normalized) {
-            // Determine normalization type
-            let message = '✓ Нормализовано';
-            let bgColor = 'bg-green-500';
-            
-            if (original.startsWith('8') && normalized.startsWith('+7')) {
-                message = '✓ 8 → +7';
-                bgColor = 'bg-blue-500';
-            } else if (original.startsWith('7') && normalized.startsWith('+7')) {
-                message = '✓ +7 добавлен';
-                bgColor = 'bg-blue-500';
-            } else if (original.startsWith('9') && normalized.startsWith('+7')) {
-                message = '✓ +7 добавлен';
-                bgColor = 'bg-blue-500';
-            } else if (original.startsWith('97') && normalized.startsWith('+7')) {
-                message = '✓ +7 добавлен';
-                bgColor = 'bg-blue-500';
-            }
-            
-            // Create temporary indicator
-            const indicator = document.createElement('div');
-            indicator.className = `absolute top-0 right-0 ${bgColor} text-white text-xs px-2 py-1 rounded-bl-lg opacity-0 transition-all duration-300 transform scale-95`;
-            indicator.textContent = message;
-            
-            // Add to phone input container
-            const phoneContainer = phoneInput.parentElement;
-            phoneContainer.style.position = 'relative';
-            phoneContainer.appendChild(indicator);
-            
-            // Show indicator with animation
-            setTimeout(() => {
-                indicator.style.opacity = '1';
-                indicator.style.transform = 'scale(1)';
-            }, 100);
-            
-            // Hide indicator after 2.5 seconds
-            setTimeout(() => {
-                indicator.style.opacity = '0';
-                indicator.style.transform = 'scale(0.95)';
-                setTimeout(() => {
-                    if (phoneContainer.contains(indicator)) {
-                        phoneContainer.removeChild(indicator);
-                    }
-                }, 300);
-            }, 2500);
-        }
-
         // Add real-time validation
         phoneInput.addEventListener('blur', (e) => {
-            const validation = phoneHandler.validatePhone(e.target.value);
+            const validation = phoneMaskHandler.validatePhone(e.target.value);
             if (!validation.valid) {
                 showStatus(validation.error, 'error');
                 e.target.focus();
@@ -836,7 +803,7 @@
         
         // Request authorization with improved validation
         requestAuthBtn.addEventListener('click', () => {
-            const validation = phoneHandler.validatePhone(phoneInput.value);
+            const validation = phoneMaskHandler.validatePhone(phoneInput.value);
             
             if (!validation.valid) {
                 showStatus(validation.error, 'error');
@@ -850,7 +817,7 @@
         
         // Verify code with improved validation
         verifyCodeBtn.addEventListener('click', () => {
-            const validation = phoneHandler.validatePhone(phoneInput.value);
+            const validation = phoneMaskHandler.validatePhone(phoneInput.value);
             const code = codeInput.value.trim();
             
             if (!validation.valid) {
@@ -937,6 +904,13 @@
         
         socket.on('authError', (data) => {
             showStatus(data.message, 'error');
+        });
+        
+        socket.on('serverShutdown', (data) => {
+            showStatus('Сервер выключается. Переподключение через 3 секунды...', 'warning');
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
         });
         
         socket.on('logoutSuccess', () => {

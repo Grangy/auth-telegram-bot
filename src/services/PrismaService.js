@@ -21,9 +21,28 @@ class PrismaService {
         try {
             await this.prisma.$connect();
             logger.info('✅ База данных подключена');
+            
+            // Проверяем состояние базы данных
+            await this.healthCheck();
         } catch (error) {
             logger.error('❌ Ошибка подключения к базе данных:', error);
             throw error;
+        }
+    }
+    
+    async healthCheck() {
+        try {
+            // Для MongoDB используем простой findFirst запрос вместо $queryRaw
+            // Это проверяет соединение с базой данных
+            await this.prisma.user.findFirst({
+                take: 1,
+                select: { id: true } // Выбираем только id для минимальной нагрузки
+            });
+            logger.debug('✅ Проверка здоровья базы данных пройдена');
+            return true;
+        } catch (error) {
+            logger.error('❌ Ошибка проверки здоровья базы данных:', error);
+            return false;
         }
     }
 
@@ -38,14 +57,41 @@ class PrismaService {
 
     // User operations
     async createUser(userData) {
-        try {
-            return await this.prisma.user.create({
-                data: userData
-            });
-        } catch (error) {
-            logger.error('Ошибка создания пользователя:', error);
-            throw error;
+        // Валидация входных данных
+        if (!userData.phone) {
+            throw new Error('Поле phone обязательно для создания пользователя');
         }
+        
+        if (!userData.telegramUserId) {
+            throw new Error('Поле telegramUserId обязательно для создания пользователя');
+        }
+        
+        // Валидация формата номера телефона
+        if (!userData.phone.startsWith('+7') || userData.phone.length !== 12) {
+            throw new Error('Неверный формат номера телефона. Ожидается +7XXXXXXXXXX');
+        }
+        
+        const maxRetries = 3;
+        let lastError;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await this.prisma.user.create({
+                    data: userData
+                });
+            } catch (error) {
+                lastError = error;
+                logger.warn(`Попытка ${attempt}/${maxRetries} создания пользователя не удалась:`, error.message);
+                
+                if (attempt < maxRetries) {
+                    // Ждем перед повторной попыткой
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+            }
+        }
+        
+        logger.error('Ошибка создания пользователя после всех попыток:', lastError);
+        throw lastError;
     }
 
     async findUserByPhone(phone) {
@@ -103,6 +149,22 @@ class PrismaService {
                 where: { socketId }
             });
         } catch (error) {
+            // Обрабатываем специфические ошибки базы данных
+            if (error.code === 'P2010') {
+                logger.error('Ошибка подключения к базе данных:', error.message);
+                // Попытка переподключения
+                try {
+                    await this.prisma.$connect();
+                    logger.info('Переподключение к базе данных успешно');
+                    // Повторяем запрос
+                    return await this.prisma.session.findUnique({
+                        where: { socketId }
+                    });
+                } catch (reconnectError) {
+                    logger.error('Ошибка переподключения к базе данных:', reconnectError);
+                    throw error;
+                }
+            }
             logger.error('Ошибка поиска сессии по socket ID:', error);
             throw error;
         }
@@ -117,10 +179,19 @@ class PrismaService {
 
             if (!existingSession) {
                 // Если сессии нет, создаем новую
+                // Убеждаемся, что phone присутствует в данных
+                if (!sessionData.phone) {
+                    throw new Error('Поле phone обязательно для создания сессии');
+                }
+                
                 return await this.prisma.session.create({
                     data: {
                         socketId,
-                        ...sessionData
+                        phone: sessionData.phone,
+                        authorized: sessionData.authorized || false,
+                        name: sessionData.name || null,
+                        telegramUserId: sessionData.telegramUserId || null,
+                        expiresAt: sessionData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 часа по умолчанию
                     }
                 });
             }
@@ -138,6 +209,16 @@ class PrismaService {
 
     async deleteSession(socketId) {
         try {
+            // Сначала проверяем, существует ли сессия
+            const existingSession = await this.prisma.session.findUnique({
+                where: { socketId }
+            });
+
+            if (!existingSession) {
+                logger.warn(`Сессия с socketId ${socketId} не найдена для удаления`);
+                return null;
+            }
+
             return await this.prisma.session.delete({
                 where: { socketId }
             });
@@ -205,11 +286,14 @@ class PrismaService {
     // SMS Code operations
     async createSmsCode(smsCodeData) {
         try {
-            return await this.prisma.smsCode.upsert({
+            logger.debug('Создание SMS кода:', smsCodeData);
+            const result = await this.prisma.smsCode.upsert({
                 where: { phone: smsCodeData.phone },
                 update: smsCodeData,
                 create: smsCodeData
             });
+            logger.debug('SMS код создан в БД:', result);
+            return result;
         } catch (error) {
             logger.error('Ошибка создания SMS кода:', error);
             throw error;
@@ -218,9 +302,12 @@ class PrismaService {
 
     async findSmsCode(phone) {
         try {
-            return await this.prisma.smsCode.findUnique({
+            logger.debug(`Поиск SMS кода для номера: ${phone}`);
+            const result = await this.prisma.smsCode.findUnique({
                 where: { phone }
             });
+            logger.debug(`Найден SMS код в БД:`, result);
+            return result;
         } catch (error) {
             logger.error('Ошибка поиска SMS кода:', error);
             throw error;
@@ -229,10 +316,13 @@ class PrismaService {
 
     async markSmsCodeAsUsed(phone) {
         try {
-            return await this.prisma.smsCode.update({
+            logger.debug(`Пометка SMS кода как использованного для номера: ${phone}`);
+            const result = await this.prisma.smsCode.update({
                 where: { phone },
                 data: { used: true }
             });
+            logger.debug(`SMS код помечен как использованный:`, result);
+            return result;
         } catch (error) {
             logger.error('Ошибка пометки SMS кода как использованного:', error);
             throw error;

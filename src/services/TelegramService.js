@@ -40,6 +40,9 @@ class TelegramService {
             
             if (error.message.includes('Conflict: terminated by other getUpdates request')) {
                 this.handleConflictError();
+            } else if (error.message.includes('ETELEGRAM') || error.message.includes('ECONNRESET')) {
+                // Сетевые ошибки - перезапускаем polling
+                this.handleNetworkError();
             }
             
             if (this.errorCount >= this.maxErrors) {
@@ -50,6 +53,7 @@ class TelegramService {
         
         this.bot.on('polling_error', (error) => {
             logger.error('Ошибка polling:', error.message);
+            this.handlePollingError(error);
         });
     }
 
@@ -69,6 +73,41 @@ class TelegramService {
             }, 10000);
         } catch (stopError) {
             logger.error('Ошибка остановки polling:', stopError.message);
+        }
+    }
+
+    handleNetworkError() {
+        logger.info('Обнаружена сетевая ошибка. Перезапуск polling через 5 секунд...');
+        try {
+            this.bot.stopPolling();
+            setTimeout(() => {
+                try {
+                    this.bot.startPolling();
+                    logger.info('Polling перезапущен после сетевой ошибки');
+                    this.errorCount = 0;
+                } catch (restartError) {
+                    logger.error('Ошибка перезапуска polling после сетевой ошибки:', restartError.message);
+                }
+            }, 5000);
+        } catch (stopError) {
+            logger.error('Ошибка остановки polling при сетевой ошибке:', stopError.message);
+        }
+    }
+
+    handlePollingError(error) {
+        logger.error('Обработка ошибки polling:', error.message);
+        
+        // Если это временная ошибка, пытаемся перезапустить
+        if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
+            logger.info('Временная ошибка polling. Перезапуск через 3 секунды...');
+            setTimeout(() => {
+                try {
+                    this.bot.startPolling();
+                    logger.info('Polling перезапущен после временной ошибки');
+                } catch (restartError) {
+                    logger.error('Ошибка перезапуска polling после временной ошибки:', restartError.message);
+                }
+            }, 3000);
         }
     }
 
