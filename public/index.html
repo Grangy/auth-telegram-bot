@@ -462,9 +462,15 @@
         // Живое форматирование при вводе/вставке
         const applyMask = () => {
             const prev = phoneInput.value;
-            const start = phoneInput.selectionStart || 0;
+            const start = phoneInput.selectionStart;
+            const caretIndex = (start === null ? prev.length : start);
 
-            const digitIndexBefore = phoneMaskHandler.getDigitsCountUpTo(prev, start);
+            let digitIndexBefore = phoneMaskHandler.getDigitsCountUpTo(prev, caretIndex);
+            // Fallback для мобильных браузеров, где selectionStart может быть 0 при вводе первой цифры
+            const totalDigits = phoneMaskHandler.onlyDigits(prev).length;
+            if (digitIndexBefore === 0 && totalDigits > 0) {
+                digitIndexBefore = totalDigits;
+            }
             const tight = phoneMaskHandler.formatAsRuPhoneTight(prev);
             const withMask = phoneMaskHandler.formatAsRuPhone(prev); // с плейсхолдерами
 
@@ -475,8 +481,9 @@
             phoneInput.value = complete ? tight : withMask;
 
             // Восстановим каретку по количеству введённых пользователем цифр,
-            // игнорируя авто-подставленный код страны ('+7')
-            const skipInitialDigits = phoneInput.value.startsWith('+7') ? 1 : 0;
+            // игнорируя авто-подставленный код страны ('+7') если первая введённая цифра не '7'
+            const prevDigits = phoneMaskHandler.onlyDigits(prev);
+            const skipInitialDigits = (prevDigits && prevDigits.length > 0 && prevDigits[0] !== '7') ? 1 : 0;
             const newCaret = phoneMaskHandler.caretFromDigitIndex(phoneInput.value, digitIndexBefore, skipInitialDigits);
             phoneInput.setSelectionRange(newCaret, newCaret);
         };
