@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
+const errorHandler = require('../middleware/errorHandler');
 
 class PrismaService {
     constructor() {
@@ -53,7 +54,10 @@ class PrismaService {
                 where: { phone }
             });
         } catch (error) {
-            logger.error('Ошибка поиска пользователя по телефону:', error);
+            const result = await errorHandler.handleError(error, 'findUserByPhone', { phone });
+            if (result.shouldRetry) {
+                return await this.findUserByPhone(phone);
+            }
             throw error;
         }
     }
@@ -106,6 +110,22 @@ class PrismaService {
 
     async updateSession(socketId, sessionData) {
         try {
+            // Сначала проверяем, существует ли сессия
+            const existingSession = await this.prisma.session.findUnique({
+                where: { socketId }
+            });
+
+            if (!existingSession) {
+                // Если сессии нет, создаем новую
+                return await this.prisma.session.create({
+                    data: {
+                        socketId,
+                        ...sessionData
+                    }
+                });
+            }
+
+            // Если сессия существует, обновляем её
             return await this.prisma.session.update({
                 where: { socketId },
                 data: sessionData
@@ -158,6 +178,26 @@ class PrismaService {
             });
         } catch (error) {
             logger.error('Ошибка пометки ключа как использованного:', error);
+            throw error;
+        }
+    }
+
+    async findActiveAuthKeysByPhone(phone) {
+        try {
+            return await this.prisma.authKey.findMany({
+                where: {
+                    phone: phone,
+                    used: false,
+                    expiresAt: {
+                        gt: new Date()
+                    }
+                },
+                orderBy: {
+                    timestamp: 'desc'
+                }
+            });
+        } catch (error) {
+            logger.error('Ошибка поиска активных ключей авторизации по номеру:', error);
             throw error;
         }
     }
@@ -293,6 +333,67 @@ class PrismaService {
             return result.count;
         } catch (error) {
             logger.error('Ошибка очистки устаревших ключей авторизации:', error);
+            throw error;
+        }
+    }
+
+    // Очистка всех данных (для тестирования)
+    async clearAllData() {
+        try {
+            logger.warn('🧹 Очистка всех данных из базы данных...');
+            
+            // Удаляем в правильном порядке (с учетом внешних ключей)
+            const sessionsResult = await this.prisma.session.deleteMany({});
+            const smsCodesResult = await this.prisma.smsCode.deleteMany({});
+            const authKeysResult = await this.prisma.authKey.deleteMany({});
+            const longTermSessionsResult = await this.prisma.longTermSession.deleteMany({});
+            const usersResult = await this.prisma.user.deleteMany({});
+            const cacheResult = await this.prisma.cacheEntry.deleteMany({});
+            
+            logger.warn(`🗑️ Очищено:`);
+            logger.warn(`   - Сессий: ${sessionsResult.count}`);
+            logger.warn(`   - SMS кодов: ${smsCodesResult.count}`);
+            logger.warn(`   - Ключей авторизации: ${authKeysResult.count}`);
+            logger.warn(`   - Долгосрочных сессий: ${longTermSessionsResult.count}`);
+            logger.warn(`   - Пользователей: ${usersResult.count}`);
+            logger.warn(`   - Кэш записей: ${cacheResult.count}`);
+            
+            return {
+                sessions: sessionsResult.count,
+                smsCodes: smsCodesResult.count,
+                authKeys: authKeysResult.count,
+                longTermSessions: longTermSessionsResult.count,
+                users: usersResult.count,
+                cache: cacheResult.count
+            };
+        } catch (error) {
+            logger.error('Ошибка очистки всех данных:', error);
+            throw error;
+        }
+    }
+
+    // Очистка только пользователей
+    async clearUsers() {
+        try {
+            logger.warn('🧹 Очистка пользователей из базы данных...');
+            
+            // Сначала удаляем связанные данные
+            const sessionsResult = await this.prisma.session.deleteMany({});
+            const longTermSessionsResult = await this.prisma.longTermSession.deleteMany({});
+            const usersResult = await this.prisma.user.deleteMany({});
+            
+            logger.warn(`🗑️ Очищено:`);
+            logger.warn(`   - Пользователей: ${usersResult.count}`);
+            logger.warn(`   - Сессий: ${sessionsResult.count}`);
+            logger.warn(`   - Долгосрочных сессий: ${longTermSessionsResult.count}`);
+            
+            return {
+                users: usersResult.count,
+                sessions: sessionsResult.count,
+                longTermSessions: longTermSessionsResult.count
+            };
+        } catch (error) {
+            logger.error('Ошибка очистки пользователей:', error);
             throw error;
         }
     }

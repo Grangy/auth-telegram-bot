@@ -10,8 +10,11 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node src/scripts/migrate.js",
+    "db:init": "node src/scripts/init-db.js",
+    "db:init:cleanup": "node src/scripts/init-db.js --cleanup",
     "db:studio": "prisma studio",
-    "help": "echo 'Доступные команды:' && echo 'npm start - запуск сервера' && echo 'npm run dev - разработка' && echo 'npm run db:push - синхронизация БД' && echo 'npm run db:studio - просмотр БД'"
+    "setup": "npm run db:generate && npm run db:push && npm run db:init",
+    "help": "echo 'Доступные команды:' && echo 'npm start - запуск сервера' && echo 'npm run dev - разработка' && echo 'npm run setup - полная настройка БД' && echo 'npm run db:init - инициализация БД' && echo 'npm run db:push - синхронизация БД' && echo 'npm run db:studio - просмотр БД'"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
