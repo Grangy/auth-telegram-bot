@@ -306,8 +306,75 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Остальные обработчики событий...
-    // (logout, resetSession и т.д.)
+    // Выход из системы
+    socket.on('logout', async () => {
+        try {
+            const sessionData = await getSessionBySocketId(socket.id);
+            if (sessionData) {
+                await prismaService.deleteSession(socket.id);
+                await cacheService.invalidateSession(socket.id);
+                socket.emit('logoutSuccess');
+                logger.info(`Пользователь вышел из системы: ${socket.id}`);
+            }
+        } catch (error) {
+            logger.error('Ошибка в logout:', error);
+        }
+    });
+
+    // Сброс сессии
+    socket.on('resetSession', async () => {
+        try {
+            const sessionData = await getSessionBySocketId(socket.id);
+            if (sessionData) {
+                const phone = sessionData.phone;
+                
+                // Удаляем текущую сессию
+                await prismaService.deleteSession(socket.id);
+                await cacheService.invalidateSession(socket.id);
+                
+                // Находим пользователя по номеру
+                let user = await cacheService.getUserByPhone(phone);
+                if (!user) {
+                    user = await prismaService.findUserByPhone(phone);
+                }
+                
+                if (user && user.telegramUserId) {
+                    // Генерируем код
+                    const smsCode = Math.floor(1000 + Math.random() * 9000).toString();
+                    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+                    
+                    // Сохраняем код для проверки
+                    await prismaService.createSmsCode({
+                        phone: phone,
+                        code: smsCode,
+                        socketId: socket.id,
+                        expiresAt: expiresAt
+                    });
+                    
+                    // Кэшируем код
+                    await cacheService.setSmsCode(phone, {
+                        code: smsCode,
+                        socketId: socket.id,
+                        expiresAt: expiresAt
+                    });
+                    
+                    // Отправляем код в Telegram
+                    await telegramService.sendMessage(user.telegramUserId, 
+                        `🔄 Сброс сессии\n\n` +
+                        `Код авторизации: ${smsCode}\n\n` +
+                        `Введите этот код на сайте для входа в систему.`
+                    );
+                    
+                    logger.info(`Код сброса сессии отправлен в Telegram пользователю ${user.telegramUserId}: ${smsCode}`);
+                }
+                
+                socket.emit('sessionReset');
+                socket.emit('smsCodeSent', { phone });
+            }
+        } catch (error) {
+            logger.error('Ошибка в resetSession:', error);
+        }
+    });
 });
 
 // Обработчики событий Telegram бота

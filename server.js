@@ -3,6 +3,8 @@ const http = require('http');
 const socketIo = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 
 // Импорт наших модулей
 const config = require('./src/config/config');
@@ -28,24 +30,24 @@ app.use(express.json());
 // Создание долгосрочной сессии
 function createLongTermSession(userData) {
     const sessionToken = uuidv4();
-    const expiresAt = Date.now() + config.session.maxAge;
+    const expiresAt = new Date(Date.now() + config.session.maxAge);
     
-    const longTermSession = {
+    return {
         token: sessionToken,
         phone: userData.phone,
         name: userData.name,
         telegramUserId: userData.telegramUserId,
-        createdAt: Date.now(),
+        createdAt: new Date(),
         expiresAt: expiresAt
     };
-    
-    return { sessionToken, longTermSession };
 }
 
 // Получение сессии по socket ID
 function getSessionBySocketId(socketId) {
     const db = databaseService.loadDatabase();
-    for (const [sessionId, session] of Object.entries(db.sessions || {})) {
+    const sessions = db.sessions || {};
+    
+    for (const [sessionId, session] of Object.entries(sessions)) {
         if (session.socketId === socketId) {
             return { sessionId, session };
         }
@@ -70,31 +72,35 @@ io.on('connection', (socket) => {
 
     // Проверка существующей авторизации
     socket.on('checkAuth', (data) => {
-        if (data && data.sessionToken) {
-            const db = databaseService.loadDatabase();
-            const longTermSession = db.longTermSessions?.[data.sessionToken];
-            
-            if (longTermSession && longTermSession.expiresAt > Date.now()) {
-                socket.emit('alreadyAuthorized', {
-                    phone: longTermSession.phone,
-                    name: longTermSession.name
-                });
-                return;
+        try {
+            if (data && data.sessionToken) {
+                const db = databaseService.loadDatabase();
+                const longTermSession = db.longTermSessions?.[data.sessionToken];
+                
+                if (longTermSession && longTermSession.expiresAt > new Date()) {
+                    socket.emit('alreadyAuthorized', {
+                        phone: longTermSession.phone,
+                        name: longTermSession.name
+                    });
+                    return;
+                }
             }
-        }
-        
-        // Проверяем обычную сессию
-        const sessionData = getSessionBySocketId(socket.id);
-        if (sessionData && sessionData.session.authorized) {
-            socket.emit('alreadyAuthorized', {
-                phone: sessionData.session.phone,
-                name: sessionData.session.name
-            });
+            
+            // Проверяем обычную сессию
+            const sessionData = getSessionBySocketId(socket.id);
+            if (sessionData && sessionData.session.authorized) {
+                socket.emit('alreadyAuthorized', {
+                    phone: sessionData.session.phone,
+                    name: sessionData.session.name
+                });
+            }
+        } catch (error) {
+            logger.error('Ошибка проверки авторизации:', error);
         }
     });
 
     // Запрос авторизации
-    socket.on('requestAuth', async (data) => {
+    socket.on('requestAuth', (data) => {
         try {
             const { phone } = data;
             if (!phone) {
@@ -106,10 +112,10 @@ io.on('connection', (socket) => {
             
             const db = databaseService.loadDatabase();
             
-            // Проверяем, есть ли уже пользователь с таким номером
-            const existingUser = Object.values(db.users || {}).find(user => user.phone === phone);
+            // Проверяем, существует ли пользователь
+            const user = Object.values(db.users || {}).find(u => u.phone === phone);
             
-            if (existingUser && existingUser.telegramUserId) {
+            if (user && user.telegramUserId) {
                 // Пользователь уже существует, отправляем SMS код
                 const smsCode = Math.floor(1000 + Math.random() * 9000).toString();
                 
@@ -125,14 +131,14 @@ io.on('connection', (socket) => {
                 databaseService.saveDatabase(db);
                 
                 // Отправляем код в Telegram
-                await telegramService.sendMessage(existingUser.telegramUserId, 
+                bot.sendMessage(user.telegramUserId, 
                     `🔐 Авторизация\n\n` +
                     `Код авторизации: ${smsCode}\n\n` +
                     `Введите этот код на сайте для входа в систему.`
                 );
                 
                 socket.emit('smsCodeSent', { phone });
-                logger.info(`SMS код отправлен существующему пользователю ${existingUser.telegramUserId}: ${smsCode}`);
+                logger.info(`SMS код отправлен существующему пользователю ${user.telegramUserId}: ${smsCode}`);
                 return;
             }
             
@@ -144,8 +150,8 @@ io.on('connection', (socket) => {
             db.authKeys[authKey] = {
                 phone: phone,
                 socketId: socket.id,
-                timestamp: Date.now(),
-                used: false
+                used: false,
+                timestamp: Date.now()
             };
             
             // Создаем сессию
@@ -312,7 +318,7 @@ io.on('connection', (socket) => {
                     databaseService.saveDatabase(db);
                     
                     // Отправляем код в Telegram
-                    telegramService.sendMessage(user.telegramUserId, 
+                    bot.sendMessage(user.telegramUserId, 
                         `🔄 Сброс сессии\n\n` +
                         `Код авторизации: ${smsCode}\n\n` +
                         `Введите этот код на сайте для входа в систему.`
@@ -426,16 +432,6 @@ server.listen(config.port, () => {
     logger.info(`🚀 Сервер запущен на порту ${config.port}`);
     logger.info(`📱 Telegram бот активен`);
     logger.info(`🌐 Откройте http://localhost:${config.port} в браузере`);
-});
-
-// Обработка завершения процесса
-process.on('SIGINT', () => {
-    logger.info('🛑 Завершение работы сервера...');
-    telegramService.stopPolling();
-    server.close(() => {
-        logger.info('✅ Сервер остановлен');
-        process.exit(0);
-    });
 });
 
 module.exports = { app, server, io };
