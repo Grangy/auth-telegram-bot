@@ -779,6 +779,16 @@ async function startServer() {
         cacheService = new CacheService();
         telegramService = new TelegramService();
 
+        // Проверяем статус кэша и логируем информацию
+        setTimeout(() => {
+            const cacheStatus = cacheService.getCacheStatus();
+            if (cacheStatus.isConnected) {
+                logger.info('✅ Redis кэш подключен');
+            } else {
+                logger.warn(`⚠️ Redis недоступен, используется fallback кэш (размер: ${cacheStatus.fallbackCacheSize})`);
+            }
+        }, 2000);
+
         // Получаем экземпляр бота для обработки событий
         bot = telegramService.getBot();
         

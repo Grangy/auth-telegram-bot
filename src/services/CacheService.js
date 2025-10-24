@@ -5,6 +5,11 @@ class CacheService {
     constructor() {
         this.redis = new RedisService();
         this.defaultTTL = 3600; // 1 час
+        
+        // Периодическая очистка fallback кэша
+        setInterval(() => {
+            this.redis.cleanupFallbackCache();
+        }, 5 * 60 * 1000); // каждые 5 минут
     }
 
     // User cache
@@ -149,14 +154,41 @@ class CacheService {
     // Cache statistics
     async getStats() {
         try {
-            const info = await this.redis.client.info('memory');
-            return {
-                memory: info,
-                timestamp: new Date().toISOString()
-            };
+            if (this.redis.isConnected && this.redis.client) {
+                const info = await this.redis.client.info('memory');
+                return {
+                    memory: info,
+                    timestamp: new Date().toISOString()
+                };
+            } else {
+                return {
+                    memory: 'Fallback cache in use',
+                    fallbackCacheSize: this.redis.fallbackCache?.size || 0,
+                    timestamp: new Date().toISOString()
+                };
+            }
         } catch (error) {
             logger.error('Ошибка получения статистики кэша:', error);
-            return null;
+            return {
+                memory: 'Cache unavailable',
+                fallbackCacheSize: this.redis.fallbackCache?.size || 0,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
+
+    // Получение статуса кэша
+    getCacheStatus() {
+        return this.redis.getConnectionStatus();
+    }
+
+    // Проверка доступности кэша
+    async isCacheAvailable() {
+        try {
+            await this.redis.exists('health_check');
+            return true;
+        } catch (error) {
+            return false;
         }
     }
 }
