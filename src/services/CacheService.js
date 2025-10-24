@@ -50,6 +50,16 @@ class CacheService {
         return this.del(key);
     }
 
+    // Get session by socket ID (alias for compatibility)
+    async getSessionBySocketId(socketId) {
+        return this.getSession(socketId);
+    }
+
+    // Set session by socket ID (alias for compatibility)
+    async setSessionBySocketId(socketId, sessionData, ttl = this.defaultTTL) {
+        return this.setSession(socketId, sessionData, ttl);
+    }
+
     // Long-term session cache
     async getLongTermSession(token) {
         const key = `long_term_session:${token}`;
@@ -214,6 +224,23 @@ class CacheService {
         } catch (error) {
             logger.error('Ошибка прогрева кэша сессии:', error);
         }
+    }
+
+    // Invalidate methods for compatibility
+    async invalidateSession(socketId) {
+        return this.deleteSession(socketId);
+    }
+
+    async invalidateLongTermSession(token) {
+        return this.deleteLongTermSession(token);
+    }
+
+    async invalidateSmsCode(phone) {
+        return this.deleteSmsCode(phone);
+    }
+
+    async invalidateAuthKey(key) {
+        return this.deleteAuthKey(key);
     }
 }
 
