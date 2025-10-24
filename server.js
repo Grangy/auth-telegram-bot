@@ -15,7 +15,7 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 // Инициализация сервисов
-const databaseService = new DatabaseService(config.database.path);
+const databaseService = new DatabaseService(config.database.path || 'database.json');
 const telegramService = new TelegramService();
 
 // Получаем экземпляр бота для обработки событий
