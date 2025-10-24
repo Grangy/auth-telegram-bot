@@ -127,6 +127,37 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// Нормализация номера телефона (поддержка всех вариантов российских номеров)
+function normalizePhoneNumber(phone) {
+    if (!phone) return '';
+    
+    // Удаляем все символы кроме цифр и +
+    let cleaned = phone.replace(/[^\d+]/g, '');
+    
+    // Обработка российских номеров - все варианты
+    if (cleaned.startsWith('8')) {
+        // 8XXXXXXXXXX -> +7XXXXXXXXXX
+        cleaned = '+7' + cleaned.substring(1);
+    } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7')) {
+        // 7XXXXXXXXXX -> +7XXXXXXXXXX
+        cleaned = '+' + cleaned;
+    } else if (cleaned.startsWith('+7')) {
+        // +7XXXXXXXXXX -> остается как есть
+        cleaned = cleaned;
+    } else if (cleaned.startsWith('9') && cleaned.length >= 10) {
+        // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
+        cleaned = '+7' + cleaned;
+    } else if (cleaned.startsWith('978') && cleaned.length >= 10) {
+        // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
+        cleaned = '+' + cleaned;
+    } else if (cleaned.length > 0 && !cleaned.startsWith('+')) {
+        // Любой другой номер -> добавляем +
+        cleaned = '+' + cleaned;
+    }
+    
+    return cleaned;
+}
+
 // Создание долгосрочной сессии
 function createLongTermSession(userData) {
     const sessionToken = uuidv4();
@@ -652,9 +683,8 @@ function setupTelegramHandlers() {
         logger.info(`Получен контакт от пользователя ${userName} (${userId}): ${contact.phone_number}`);
         
         try {
-            // Нормализуем номер телефона
-            const normalizedPhone = contact.phone_number.startsWith('+') ? 
-                contact.phone_number : `+${contact.phone_number}`;
+            // Нормализуем номер телефона (поддержка всех вариантов российских номеров)
+            const normalizedPhone = normalizePhoneNumber(contact.phone_number);
             
             // Ищем активные запросы авторизации для этого номера
             const activeAuthKeys = await prismaService.findActiveAuthKeysByPhone(normalizedPhone);

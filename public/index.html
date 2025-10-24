@@ -292,14 +292,24 @@
                 // Remove all non-digits except +
                 let cleaned = phone.replace(/[^\d+]/g, '');
                 
-                // Handle Russian numbers
+                // Handle Russian numbers - все варианты
                 if (cleaned.startsWith('8')) {
-                    cleaned = '7' + cleaned.substring(1);
+                    // 8XXXXXXXXXX -> +7XXXXXXXXXX
+                    cleaned = '+7' + cleaned.substring(1);
                 } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7')) {
+                    // 7XXXXXXXXXX -> +7XXXXXXXXXX
                     cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('7')) {
+                } else if (cleaned.startsWith('+7')) {
+                    // +7XXXXXXXXXX -> остается как есть
+                    cleaned = cleaned;
+                } else if (cleaned.startsWith('9') && cleaned.length >= 10) {
+                    // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
+                    cleaned = '+7' + cleaned;
+                } else if (cleaned.startsWith('978') && cleaned.length >= 10) {
+                    // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
                     cleaned = '+' + cleaned;
                 } else if (cleaned.length > 0 && !cleaned.startsWith('+')) {
+                    // Любой другой номер -> добавляем +
                     cleaned = '+' + cleaned;
                 }
                 
@@ -353,6 +363,19 @@
                 
                 if (!normalized.startsWith('+')) {
                     return { valid: false, error: 'Номер должен начинаться с +' };
+                }
+                
+                // Специальная проверка для российских номеров
+                if (normalized.startsWith('+7')) {
+                    // Российский номер должен быть +7XXXXXXXXXX (12 символов)
+                    if (normalized.length !== 12) {
+                        return { valid: false, error: 'Российский номер должен содержать 10 цифр после +7' };
+                    }
+                    // Проверяем, что после +7 идет валидный код оператора
+                    const operatorCode = normalized.substring(2, 5);
+                    if (!['900', '901', '902', '903', '904', '905', '906', '908', '909', '910', '911', '912', '913', '914', '915', '916', '917', '918', '919', '920', '921', '922', '923', '924', '925', '926', '927', '928', '929', '930', '931', '932', '933', '934', '935', '936', '937', '938', '939', '950', '951', '952', '953', '954', '955', '956', '957', '958', '959', '960', '961', '962', '963', '964', '965', '966', '967', '968', '969', '970', '971', '972', '973', '974', '975', '976', '977', '978', '979', '980', '981', '982', '983', '984', '985', '986', '987', '988', '989', '991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(operatorCode)) {
+                        return { valid: false, error: 'Неверный код оператора для российского номера' };
+                    }
                 }
                 
                 // Check for valid country code
