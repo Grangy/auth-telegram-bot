@@ -119,6 +119,23 @@
             background: #e0a800;
         }
 
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .back-btn:hover {
+            background: #5a6268;
+        }
+
         .status {
             margin-top: 1rem;
             padding: 10px;
@@ -179,6 +196,7 @@
         <div id="codeForm" class="hidden">
             <input type="text" id="codeInput" class="phone-input" placeholder="Введите код из Telegram" maxlength="4">
             <button id="verifyBtn" class="auth-btn">Подтвердить код</button>
+            <button id="backBtn" class="back-btn">← Назад к номеру</button>
         </div>
 
         <div id="userInfo" class="user-info hidden">
@@ -202,6 +220,7 @@
         const codeInput = document.getElementById('codeInput');
         const authBtn = document.getElementById('authBtn');
         const verifyBtn = document.getElementById('verifyBtn');
+        const backBtn = document.getElementById('backBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const resetSessionBtn = document.getElementById('resetSessionBtn');
         const status = document.getElementById('status');
@@ -209,6 +228,58 @@
         const userName = document.getElementById('userName');
 
         let authKey = null;
+        let currentPhone = null;
+        let isWaitingForCode = false;
+
+        // Загрузка состояния из localStorage
+        function loadState() {
+            const savedPhone = localStorage.getItem('authPhone');
+            const savedState = localStorage.getItem('authState');
+            
+            if (savedPhone && savedState) {
+                currentPhone = savedPhone;
+                phoneInput.value = savedPhone;
+                
+                if (savedState === 'waitingForCode') {
+                    isWaitingForCode = true;
+                    showCodeForm();
+                }
+            }
+        }
+
+        // Сохранение состояния в localStorage
+        function saveState(phone, state) {
+            if (phone) {
+                localStorage.setItem('authPhone', phone);
+                currentPhone = phone;
+            }
+            localStorage.setItem('authState', state);
+        }
+
+        // Очистка состояния
+        function clearState() {
+            localStorage.removeItem('authPhone');
+            localStorage.removeItem('authState');
+            currentPhone = null;
+            isWaitingForCode = false;
+        }
+
+        // Показать форму ввода кода
+        function showCodeForm() {
+            authForm.classList.add('hidden');
+            codeForm.classList.remove('hidden');
+            codeInput.focus();
+        }
+
+        // Показать форму авторизации
+        function showAuthForm() {
+            authForm.classList.remove('hidden');
+            codeForm.classList.add('hidden');
+            phoneInput.focus();
+        }
+
+        // Загружаем состояние при загрузке страницы
+        loadState();
 
         // Форматирование номера телефона
         phoneInput.addEventListener('input', function(e) {
@@ -241,6 +312,9 @@
                 return;
             }
 
+            // Сохраняем номер и состояние
+            saveState(phone, 'requesting');
+            
             authBtn.disabled = true;
             authBtn.textContent = 'Ожидание...';
             showStatus('Отправка запроса на авторизацию...', 'info');
@@ -271,6 +345,9 @@
                 return;
             }
 
+            // Сохраняем состояние ожидания проверки
+            saveState(null, 'verifying');
+            
             verifyBtn.disabled = true;
             verifyBtn.textContent = 'Проверка...';
             showStatus('Проверка кода...', 'info');
@@ -283,6 +360,13 @@
             if (e.key === 'Enter') {
                 verifyBtn.click();
             }
+        });
+
+        // Обработка кнопки "Назад"
+        backBtn.addEventListener('click', () => {
+            showAuthForm();
+            clearState();
+            showStatus('Введите номер телефона для авторизации', 'info');
         });
 
         // Socket события
@@ -387,6 +471,9 @@
             codeForm.classList.add('hidden');
             userInfo.classList.remove('hidden');
             
+            // Очищаем состояние при успешной авторизации
+            clearState();
+            
             // Сбрасываем кнопки
             authBtn.disabled = false;
             authBtn.textContent = 'Авторизоваться через Telegram';
@@ -401,6 +488,12 @@
             authBtn.textContent = 'Авторизоваться через Telegram';
             verifyBtn.disabled = false;
             verifyBtn.textContent = 'Подтвердить код';
+            
+            // При ошибке возвращаемся к форме авторизации
+            if (isWaitingForCode) {
+                showAuthForm();
+                clearState();
+            }
         });
 
         socket.on('logoutSuccess', () => {
@@ -410,6 +503,9 @@
             phoneInput.value = '';
             authBtn.disabled = false;
             authBtn.textContent = 'Авторизоваться через Telegram';
+            
+            // Очищаем состояние при выходе
+            clearState();
         });
 
         socket.on('alreadyAuthorized', (data) => {
@@ -430,13 +526,15 @@
             authBtn.textContent = 'Авторизоваться через Telegram';
             verifyBtn.disabled = false;
             verifyBtn.textContent = 'Подтвердить код';
+            
+            // Очищаем состояние при сбросе сессии
+            clearState();
         });
 
         socket.on('smsCodeSent', (data) => {
             showStatus(`Код отправлен в Telegram на номер ${data.phone}. Введите код ниже:`, 'info');
-            authForm.classList.add('hidden');
-            codeForm.classList.remove('hidden');
-            codeInput.focus();
+            saveState(data.phone, 'waitingForCode');
+            showCodeForm();
         });
 
         function showStatus(message, type) {
