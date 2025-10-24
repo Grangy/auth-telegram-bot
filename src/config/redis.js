@@ -13,10 +13,17 @@ class RedisService {
 
     initializeRedis() {
         try {
+            // Поддержка REDIS_URL для внешних сервисов (Render, Redis Cloud)
+            const redisConfig = process.env.REDIS_URL 
+                ? { url: process.env.REDIS_URL }
+                : {
+                    host: process.env.REDIS_HOST || 'localhost',
+                    port: process.env.REDIS_PORT || 6379,
+                    password: process.env.REDIS_PASSWORD || undefined
+                };
+
             this.client = new Redis({
-                host: process.env.REDIS_HOST || 'localhost',
-                port: process.env.REDIS_PORT || 6379,
-                password: process.env.REDIS_PASSWORD || undefined,
+                ...redisConfig,
                 retryDelayOnFailover: 1000,
                 maxRetriesPerRequest: 3,
                 lazyConnect: true,

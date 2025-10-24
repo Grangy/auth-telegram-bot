@@ -70,6 +70,59 @@ let bot;
 app.use(express.static('public'));
 app.use(express.json());
 
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const health = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: {
+                database: false,
+                redis: false,
+                telegram: false
+            }
+        };
+
+        // Проверка базы данных
+        try {
+            await prismaService?.$queryRaw`SELECT 1`;
+            health.services.database = true;
+        } catch (error) {
+            health.services.database = false;
+        }
+
+        // Проверка Redis
+        try {
+            if (cacheService) {
+                const cacheStatus = cacheService.getCacheStatus();
+                health.services.redis = cacheStatus.isConnected;
+            }
+        } catch (error) {
+            health.services.redis = false;
+        }
+
+        // Проверка Telegram бота
+        try {
+            if (telegramService && bot) {
+                const botInfo = await bot.getMe();
+                health.services.telegram = !!botInfo;
+            }
+        } catch (error) {
+            health.services.telegram = false;
+        }
+
+        const allServicesOk = Object.values(health.services).every(status => status);
+        res.status(allServicesOk ? 200 : 503).json(health);
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 // Создание долгосрочной сессии
 function createLongTermSession(userData) {
     const sessionToken = uuidv4();
