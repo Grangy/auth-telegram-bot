@@ -8,46 +8,80 @@ class RedisService {
         this.retryCount = 0;
         this.maxRetries = 5;
         
-        // Подавляем unhandled error events для Redis
-        this.setupErrorHandling();
-        this.initializeRedis();
+        // Проверяем, доступен ли Redis
+        if (process.env.REDIS_URL || (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost')) {
+            // Только если Redis настроен для продакшена
+            this.setupErrorHandling();
+            this.initializeRedis();
+        } else {
+            // Для локальной разработки без Redis используем только fallback
+            console.log('⚠️ Redis не настроен, используем только fallback кэш');
+            this.isConnected = false;
+        }
     }
 
     setupErrorHandling() {
         // Полностью подавляем unhandled error events от ioredis
         const originalEmit = process.emit;
         process.emit = function(event, ...args) {
-            // Подавляем все ошибки Redis
+            // Подавляем ВСЕ ошибки Redis
             if (event === 'unhandledRejection' && args[0]) {
                 const error = args[0];
                 if (error.message && (
                     error.message.includes('ECONNREFUSED') ||
                     error.message.includes('Redis') ||
-                    error.message.includes('ioredis')
+                    error.message.includes('ioredis') ||
+                    error.message.includes('max retries') ||
+                    error.message.includes('AggregateError')
                 )) {
-                    console.warn('⚠️ Redis подключение недоступно, используем fallback');
+                    // Полностью подавляем, не логируем
                     return false;
                 }
             }
             return originalEmit.apply(this, arguments);
         };
 
-        // Дополнительно подавляем uncaughtException для Redis
+        // Подавляем все uncaughtException для Redis
         process.on('uncaughtException', (error) => {
             if (error.message && (
                 error.message.includes('ECONNREFUSED') ||
                 error.message.includes('Redis') ||
-                error.message.includes('ioredis')
+                error.message.includes('ioredis') ||
+                error.message.includes('max retries') ||
+                error.message.includes('AggregateError')
             )) {
-                console.warn('⚠️ Redis ошибка подавлена, используем fallback');
+                // Полностью подавляем
                 return;
             }
             // Для других ошибок используем стандартную обработку
             console.error('Uncaught Exception:', error);
         });
+
+        // Дополнительно подавляем все события ошибок от ioredis
+        process.on('unhandledRejection', (reason, promise) => {
+            if (reason && reason.message && (
+                reason.message.includes('ECONNREFUSED') ||
+                reason.message.includes('Redis') ||
+                reason.message.includes('ioredis') ||
+                reason.message.includes('max retries') ||
+                reason.message.includes('AggregateError')
+            )) {
+                // Полностью подавляем
+                return;
+            }
+            // Для других ошибок используем стандартную обработку
+            console.error('Unhandled Rejection:', reason);
+        });
     }
 
     initializeRedis() {
+        // Если Redis не настроен, не пытаемся подключаться
+        if (!process.env.REDIS_URL && (!process.env.REDIS_HOST || process.env.REDIS_HOST === 'localhost')) {
+            console.log('⚠️ Redis не настроен, используем только fallback кэш');
+            this.isConnected = false;
+            return;
+        }
+
         try {
             // Поддержка REDIS_URL для внешних сервисов (Render, Redis Cloud)
             const redisConfig = process.env.REDIS_URL 
