@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embed Telegram Auth Widget</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/phoneMask.js"></script>
+  <script src="/js/telegramAuthWidget.js"></script>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
+  <div class="max-w-md mx-auto p-6">
+    <h1 class="text-2xl font-semibold mb-4">Встраиваемый виджет авторизации</h1>
+    <div id="auth-widget" class="rounded-2xl border border-gray-200 p-4 bg-white shadow-sm"></div>
+  </div>
+
+  <script>
+    const widget = new TelegramAuthWidget({
+      target: '#auth-widget',
+      onStatus: (msg, type) => console.log('[status]', type, msg),
+      onAuthKey: (data) => console.log('[authKey]', data),
+      onSmsSent: (data) => console.log('[smsCodeSent]', data),
+      onAuthSuccess: (data) => console.log('[authSuccess]', data),
+      onAuthError: (data) => console.log('[authError]', data)
+    });
+  </script>
+</body>
+</html>
+
+

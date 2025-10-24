@@ -226,6 +226,95 @@ class PhoneMaskHandler {
 - `9991234567` - без кода страны
 
 ### **PWA возможности**
+## 🧩 Модульная интеграция (MVP)
+
+### 1) Быстрый старт как виджет
+
+Добавили встраиваемый виджет `TelegramAuthWidget` с колбеками. Достаточно подключить два скрипта и инициализировать:
+
+```html
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/phoneMask.js"></script>
+<script src="/js/telegramAuthWidget.js"></script>
+<div id="auth-widget"></div>
+<script>
+  const widget = new TelegramAuthWidget({
+    target: '#auth-widget',
+    onStatus: (msg, type) => console.log('[status]', type, msg),
+    onAuthKey: (data) => console.log('[authKey]', data),
+    onSmsSent: (data) => console.log('[sms]', data),
+    onAuthSuccess: (data) => console.log('[success]', data),
+    onAuthError: (data) => console.log('[error]', data)
+  });
+  // Пример страницы: public/embed.html
+  // В меняемых проектах просто меняйте target и колбеки
+  // Можно передать существующий socket через options.socket
+  // Можно менять подписи кнопок через requestAuthLabel/verifyCodeLabel
+  // Вся логика маски вынесена в /js/phoneMask.js (UMD)
+  // Виджет экспортируется как UMD модуль
+  // Подходит для встраивания в CMS/Next.js/любой SSR
+  // В Next.js используйте dynamic import({ ssr: false })
+  // и поместите файлы в public или подключайте через CDN собственного приложения
+  // Пример адаптера под React/Next.js приведен ниже
+  
+</script>
+```
+
+### 2) Колбеки (успешные и ошибочные сценарии)
+
+- **onAuthKey({ qrCode, link })**: пришла ссылка или QR для авторизации
+- **onSmsSent({ phone })**: код отправлен, можно показать поле ввода
+- **onAuthSuccess({ name, phone, sessionToken })**: успешный вход
+- **onAuthError({ message })**: ошибка авторизации
+- **onStatus(message, type)**: статус UI ('info'|'success'|'error')
+
+### 3) Использование в Next.js (пример)
+
+```tsx
+// components/TelegramAuth.tsx
+import { useEffect, useRef } from 'react';
+
+export default function TelegramAuth() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const script1 = document.createElement('script');
+    script1.src = '/socket.io/socket.io.js';
+    const script2 = document.createElement('script');
+    script2.src = '/js/phoneMask.js';
+    const script3 = document.createElement('script');
+    script3.src = '/js/telegramAuthWidget.js';
+    document.body.append(script1, script2, script3);
+    script3.onload = () => {
+      // @ts-ignore
+      const widget = new window.TelegramAuthWidget({
+        target: ref.current!,
+        onAuthSuccess: (d: any) => console.log('success', d),
+        onAuthError: (e: any) => console.error('error', e),
+        onStatus: (m: string) => console.log(m)
+      });
+    };
+    return () => { script1.remove(); script2.remove(); script3.remove(); };
+  }, []);
+
+  return <div ref={ref} />;
+}
+```
+
+### 4) Архитектура как модуля (MVP)
+
+- Вся логика маски вынесена в `public/js/phoneMask.js` (UMD) — можно использовать отдельно
+- Виджет UI в `public/js/telegramAuthWidget.js` (UMD) — подключите и создайте экземпляр
+- Серверные события Socket.IO остаются теми же (`requestAuth`, `verifyCode`, ...)
+- Для разных проектов переиспользуются файлы из `public/js`, UI-контейнер и колбеки меняются точечно
+
+### 5) Очистка и минимизация
+
+- Вся телефонная логика — в `phoneMask.js`, удаляйте дубли в `index.html`, если встраиваете виджет
+- `embed.html` — пример встраивания; можно использовать как шаблон
+- Для продакшна можно собрать `phoneMask.js` и `telegramAuthWidget.js` через Rollup/Webpack в UMD бандл
+- При желании вынесите виджет в npm-пакет с именем `@org/telegram-auth-widget`
+
 - **Service Worker** - кэширование ресурсов
 - **Manifest** - метаданные приложения
 - **Офлайн работа** - базовая функциональность без интернета
