@@ -86,8 +86,12 @@ app.get('/health', async (req, res) => {
 
         // Проверка базы данных
         try {
-            await prismaService?.$queryRaw`SELECT 1`;
-            health.services.database = true;
+            if (prismaService) {
+                await prismaService.$queryRaw`SELECT 1`;
+                health.services.database = true;
+            } else {
+                health.services.database = false;
+            }
         } catch (error) {
             health.services.database = false;
         }
