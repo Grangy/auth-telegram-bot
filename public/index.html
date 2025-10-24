@@ -401,7 +401,7 @@
                 return { valid: true, normalized };
             }
 
-            // Format phone as user types
+            // Format phone as user types with live normalization
             formatPhoneInput(value) {
                 if (!value) return '';
                 
@@ -416,35 +416,111 @@
                 
                 this.lastLength = cleaned.length;
                 
-                // Don't format if it's too short
-                if (cleaned.length < 2) {
-                    return cleaned;
-                }
-                
-                // Handle Russian numbers
-                if (cleaned.startsWith('8')) {
-                    cleaned = '7' + cleaned.substring(1);
-                } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7')) {
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('7')) {
-                    cleaned = '+' + cleaned;
-                } else if (cleaned.length > 0 && !cleaned.startsWith('+')) {
-                    cleaned = '+' + cleaned;
+                // Live normalization after 4 characters
+                if (cleaned.length >= 4) {
+                    cleaned = this.liveNormalizePhone(cleaned);
                 }
                 
                 // Format for display
                 return this.formatPhoneDisplay(cleaned);
+            }
+            
+            // Live phone normalization after 4 characters
+            liveNormalizePhone(phone) {
+                if (!phone) return '';
+                
+                // Remove all non-digits except +
+                let cleaned = phone.replace(/[^\d+]/g, '');
+                
+                // Live normalization logic with smart detection
+                if (cleaned.startsWith('8') && cleaned.length >= 4) {
+                    // 8XXXXXXXXXX -> +7XXXXXXXXXX
+                    cleaned = '+7' + cleaned.substring(1);
+                } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7') && cleaned.length >= 4) {
+                    // 7XXXXXXXXXX -> +7XXXXXXXXXX
+                    cleaned = '+' + cleaned;
+                } else if (cleaned.startsWith('9') && cleaned.length >= 4) {
+                    // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
+                    cleaned = '+7' + cleaned;
+                } else if (cleaned.startsWith('978') && cleaned.length >= 4) {
+                    // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
+                    cleaned = '+' + cleaned;
+                } else if (cleaned.startsWith('97') && cleaned.length >= 4) {
+                    // 97XXXXXXXX -> +797XXXXXXXX (российский номер без кода страны)
+                    cleaned = '+7' + cleaned;
+                } else if (cleaned.length >= 4 && !cleaned.startsWith('+')) {
+                    // Любой другой номер -> добавляем +
+                    cleaned = '+' + cleaned;
+                }
+                
+                return cleaned;
             }
         }
 
         // Initialize phone handler
         const phoneHandler = new PhoneHandler();
         
-        // Format phone input with advanced handler
+        // Format phone input with advanced handler and live normalization
         phoneInput.addEventListener('input', (e) => {
-            const formatted = phoneHandler.formatPhoneInput(e.target.value);
+            const originalValue = e.target.value;
+            const formatted = phoneHandler.formatPhoneInput(originalValue);
+            
+            // Check if normalization occurred
+            if (formatted !== originalValue && formatted.length >= 4) {
+                // Show normalization indicator
+                showNormalizationIndicator(originalValue, formatted);
+            }
+            
             e.target.value = formatted;
         });
+        
+        // Show normalization indicator with smart messaging
+        function showNormalizationIndicator(original, normalized) {
+            // Determine normalization type
+            let message = '✓ Нормализовано';
+            let bgColor = 'bg-green-500';
+            
+            if (original.startsWith('8') && normalized.startsWith('+7')) {
+                message = '✓ 8 → +7';
+                bgColor = 'bg-blue-500';
+            } else if (original.startsWith('7') && normalized.startsWith('+7')) {
+                message = '✓ +7 добавлен';
+                bgColor = 'bg-blue-500';
+            } else if (original.startsWith('9') && normalized.startsWith('+7')) {
+                message = '✓ +7 добавлен';
+                bgColor = 'bg-blue-500';
+            } else if (original.startsWith('97') && normalized.startsWith('+7')) {
+                message = '✓ +7 добавлен';
+                bgColor = 'bg-blue-500';
+            }
+            
+            // Create temporary indicator
+            const indicator = document.createElement('div');
+            indicator.className = `absolute top-0 right-0 ${bgColor} text-white text-xs px-2 py-1 rounded-bl-lg opacity-0 transition-all duration-300 transform scale-95`;
+            indicator.textContent = message;
+            
+            // Add to phone input container
+            const phoneContainer = phoneInput.parentElement;
+            phoneContainer.style.position = 'relative';
+            phoneContainer.appendChild(indicator);
+            
+            // Show indicator with animation
+            setTimeout(() => {
+                indicator.style.opacity = '1';
+                indicator.style.transform = 'scale(1)';
+            }, 100);
+            
+            // Hide indicator after 2.5 seconds
+            setTimeout(() => {
+                indicator.style.opacity = '0';
+                indicator.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    if (phoneContainer.contains(indicator)) {
+                        phoneContainer.removeChild(indicator);
+                    }
+                }, 300);
+            }, 2500);
+        }
 
         // Add real-time validation
         phoneInput.addEventListener('blur', (e) => {
