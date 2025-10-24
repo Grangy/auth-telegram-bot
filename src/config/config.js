@@ -7,7 +7,6 @@ const config = {
     
     // Настройки базы данных
     database: {
-        path: 'database.json', // Для совместимости со старым сервером
         url: process.env.DATABASE_URL,
         backupPath: 'logs/backups'
     },
