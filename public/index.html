@@ -10,6 +10,85 @@
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+        
+        .phone-digit-container {
+            position: relative;
+        }
+        
+        .phone-digit {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .phone-digit:hover {
+            border-color: #3b82f6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .phone-digit.active {
+            border-color: #3b82f6;
+            background: #3b82f6;
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        .phone-digit.filled {
+            border-color: #10b981;
+            background: #10b981;
+            color: white;
+            animation: pulse 0.6s ease-in-out;
+        }
+        
+        .phone-digit.error {
+            border-color: #ef4444;
+            background: #fef2f2;
+            color: #dc2626;
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .phone-digit::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+        
+        .phone-digit:hover::before {
+            transform: translateX(100%);
+        }
     </style>
 </head>
 <body class="gradient-bg min-h-screen flex items-center justify-center p-4">
@@ -22,16 +101,79 @@
         <h1 class="text-2xl font-bold text-gray-800 mb-6">Telegram Authorization</h1>
         
         <!-- Auth Form -->
-        <div id="authForm" class="space-y-4">
+        <div id="authForm" class="space-y-6">
             <div>
-                <label for="phoneInput" class="block text-sm font-medium text-gray-700 mb-2">Номер телефона</label>
+                <label class="block text-sm font-medium text-gray-700 mb-4 text-center">Номер телефона</label>
+                
+                <!-- Phone Input with Individual Digits -->
+                <div class="flex justify-center items-center space-x-2 mb-4">
+                    <div class="phone-digit-container">
+                        <div class="phone-digit active">+</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="7">7</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="9">9</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="8">8</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="1">1</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="7">7</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="7">7</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="5">5</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="0">0</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="0">0</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="1">1</div>
+                    </div>
+                    <div class="phone-digit-container">
+                        <div class="phone-digit" data-digit="8">8</div>
+                    </div>
+                </div>
+                
+                <!-- Hidden input for actual phone value -->
                 <input 
                     type="tel" 
                     id="phoneInput" 
-                    placeholder="+7XXXXXXXXXX" 
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    value="+79817750018"
+                    class="hidden"
                 >
+                
+                <!-- Manual input option -->
+                <div class="mt-4">
+                    <button 
+                        id="manualInputBtn" 
+                        class="text-sm text-blue-600 hover:text-blue-800 underline"
+                    >
+                        Ввести номер вручную
+                    </button>
+                </div>
+                
+                <!-- Manual input field (hidden by default) -->
+                <div id="manualInputContainer" class="hidden mt-4">
+                    <input 
+                        type="tel" 
+                        id="manualPhoneInput" 
+                        placeholder="+7XXXXXXXXXX" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    >
+                </div>
             </div>
+            
             <button 
                 id="authBtn" 
                 class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -115,6 +257,8 @@
         let authKey = null;
         let currentPhone = null;
         let isWaitingForCode = false;
+        let currentDigitIndex = 1; // Start from first digit after +
+        let phoneDigits = ['+', '7', '9', '8', '1', '7', '7', '5', '0', '0', '1', '8'];
 
         // Сохранение состояния
         function saveState(phone, state) {
@@ -124,7 +268,7 @@
                 timestamp: Date.now()
             };
             localStorage.setItem('authState', JSON.stringify(stateData));
-            localStorage.setItem('authPhone', phone);
+                localStorage.setItem('authPhone', phone);
         }
 
         // Очистка состояния
@@ -134,6 +278,152 @@
             localStorage.removeItem('sessionToken');
             currentPhone = null;
             isWaitingForCode = false;
+        }
+
+        // Форматирование номера телефона
+        function formatPhoneNumber(input) {
+            // Убираем все кроме цифр и +
+            let cleaned = input.replace(/[^\d+]/g, '');
+            
+            // Если начинается с 8, заменяем на +7
+            if (cleaned.startsWith('8')) {
+                cleaned = '+7' + cleaned.substring(1);
+            }
+            // Если начинается с 7, добавляем +
+            else if (cleaned.startsWith('7')) {
+                cleaned = '+' + cleaned;
+            }
+            // Если не начинается с +, добавляем +7
+            else if (!cleaned.startsWith('+')) {
+                cleaned = '+7' + cleaned;
+            }
+            
+            return cleaned;
+        }
+
+        // Обновление отображения номера
+        function updatePhoneDisplay() {
+            const phoneValue = phoneInput.value;
+            const digits = phoneValue.split('');
+            
+            // Обновляем отображение цифр
+            document.querySelectorAll('.phone-digit').forEach((digit, index) => {
+                if (index < digits.length) {
+                    digit.textContent = digits[index];
+                    digit.classList.add('filled');
+                    digit.classList.remove('error');
+                } else {
+                    digit.textContent = digit.dataset.digit || '';
+                    digit.classList.remove('filled', 'active');
+                }
+            });
+        }
+
+        // Инициализация интерактивного ввода номера
+        function initPhoneInput() {
+            const digitElements = document.querySelectorAll('.phone-digit');
+            
+            digitElements.forEach((digit, index) => {
+                digit.addEventListener('click', () => {
+                    if (index === 0) return; // Не кликаем на +
+                    
+                    // Устанавливаем активную цифру
+                    digitElements.forEach(d => d.classList.remove('active'));
+                    digit.classList.add('active');
+                    currentDigitIndex = index;
+                    
+                    // Фокусируемся на ручном вводе
+                    const manualInput = document.getElementById('manualPhoneInput');
+                    if (manualInput) {
+                        manualInput.focus();
+                        manualInput.value = phoneInput.value;
+                    }
+                });
+            });
+
+            // Обработка клавиатуры
+            document.addEventListener('keydown', (e) => {
+                if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    
+                    if (currentDigitIndex < phoneDigits.length) {
+                        phoneDigits[currentDigitIndex] = e.key;
+                        phoneInput.value = phoneDigits.join('');
+                        updatePhoneDisplay();
+                        
+                        // Переходим к следующей цифре
+                        currentDigitIndex++;
+                        if (currentDigitIndex < phoneDigits.length) {
+                            digitElements.forEach(d => d.classList.remove('active'));
+                            if (digitElements[currentDigitIndex]) {
+                                digitElements[currentDigitIndex].classList.add('active');
+                            }
+                        }
+                    }
+                } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    
+                    if (currentDigitIndex > 1) {
+                        currentDigitIndex--;
+                        phoneDigits[currentDigitIndex] = phoneDigits[currentDigitIndex].replace(/\d/, '');
+                        phoneInput.value = phoneDigits.join('');
+                        updatePhoneDisplay();
+                        
+                        digitElements.forEach(d => d.classList.remove('active'));
+                        if (digitElements[currentDigitIndex]) {
+                            digitElements[currentDigitIndex].classList.add('active');
+                        }
+                    }
+                }
+            });
+        }
+
+        // Показать QR-код
+        function showQRCode(qrCodeDataURL, link) {
+            // Создаем модальное окно для QR-кода
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
+                    <h3 class="text-xl font-bold mb-4">Авторизация через Telegram</h3>
+                    <div class="mb-4">
+                        <img src="${qrCodeDataURL}" alt="QR Code" class="mx-auto border rounded-lg">
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4">Отсканируйте QR-код или перейдите по ссылке:</p>
+                    <div class="bg-gray-100 p-3 rounded-lg mb-4">
+                        <a href="${link}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">
+                            ${link}
+                        </a>
+                    </div>
+                    <button onclick="this.closest('.fixed').remove()" 
+                            class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        Закрыть
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Показать ссылку авторизации
+        function showAuthLink(link) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
+                    <h3 class="text-xl font-bold mb-4">Авторизация через Telegram</h3>
+                    <p class="text-sm text-gray-600 mb-4">Перейдите по ссылке для авторизации:</p>
+                    <div class="bg-gray-100 p-3 rounded-lg mb-4">
+                        <a href="${link}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">
+                            ${link}
+                        </a>
+                    </div>
+                    <button onclick="this.closest('.fixed').remove()" 
+                            class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        Закрыть
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
         }
 
         // Показать форму авторизации
@@ -182,17 +472,36 @@
                 showStatus('Введите номер телефона', 'error');
                 return;
             }
-            
+
             if (!phone.startsWith('+')) {
                 showStatus('Номер должен начинаться с +', 'error');
                 return;
             }
-
+            
             authBtn.disabled = true;
             authBtn.textContent = 'Отправка запроса...';
-            
+
             socket.emit('requestAuth', { phone });
         });
+
+        // Обработка ручного ввода номера
+        const manualInputBtn = document.getElementById('manualInputBtn');
+        const manualInputContainer = document.getElementById('manualInputContainer');
+        const manualPhoneInput = document.getElementById('manualPhoneInput');
+
+        if (manualInputBtn && manualInputContainer && manualPhoneInput) {
+            manualInputBtn.addEventListener('click', () => {
+                manualInputContainer.classList.remove('hidden');
+                manualPhoneInput.focus();
+            });
+
+            manualPhoneInput.addEventListener('input', (e) => {
+                const formatted = formatPhoneNumber(e.target.value);
+                e.target.value = formatted;
+                phoneInput.value = formatted;
+                updatePhoneDisplay();
+            });
+        }
 
         // Обработка подтверждения кода
         verifyBtn.addEventListener('click', () => {
@@ -201,7 +510,7 @@
                 showStatus('Введите код', 'error');
                 return;
             }
-
+            
             verifyBtn.disabled = true;
             verifyBtn.textContent = 'Проверка...';
             
@@ -232,6 +541,14 @@
         socket.on('authKey', (data) => {
             authKey = data.key;
             showStatus('Ссылка для авторизации отправлена в Telegram', 'info');
+            
+            // Показываем QR-код и ссылку если они есть
+            if (data.qrCode) {
+                showQRCode(data.qrCode, data.link);
+            } else if (data.link) {
+                showAuthLink(data.link);
+            }
+            
             showCodeForm();
             currentPhone = phoneInput.value;
             isWaitingForCode = true;
@@ -346,6 +663,10 @@
 
         // Проверка состояния при загрузке
         window.addEventListener('load', () => {
+            // Инициализируем интерактивный ввод номера
+            initPhoneInput();
+            updatePhoneDisplay();
+            
             const savedState = localStorage.getItem('authState');
             if (savedState) {
                 try {

@@ -26,25 +26,45 @@ try {
     });
     
     // Обработка ошибок бота
+    let errorCount = 0;
+    const maxErrors = 3;
+    
     bot.on('error', (error) => {
-        console.error('Ошибка Telegram бота:', error.message);
+        errorCount++;
+        console.error(`Ошибка Telegram бота (${errorCount}/${maxErrors}):`, error.message);
+        
         if (error.message.includes('Conflict: terminated by other getUpdates request')) {
-            console.log('Перезапуск бота через 5 секунд...');
-            setTimeout(() => {
-                try {
-                    bot.stopPolling();
-                    setTimeout(() => {
+            console.log('Обнаружен конфликт getUpdates. Останавливаем polling...');
+            try {
+                bot.stopPolling();
+                console.log('Polling остановлен. Перезапуск через 10 секунд...');
+                setTimeout(() => {
+                    try {
                         bot.startPolling();
-                    }, 2000);
-                } catch (restartError) {
-                    console.error('Ошибка перезапуска бота:', restartError.message);
-                }
-            }, 5000);
+                        console.log('Polling перезапущен');
+                        errorCount = 0; // Сбрасываем счетчик при успешном перезапуске
+                    } catch (restartError) {
+                        console.error('Ошибка перезапуска polling:', restartError.message);
+                        if (errorCount >= maxErrors) {
+                            console.error('Превышено максимальное количество ошибок. Бот отключен.');
+                            return;
+                        }
+                    }
+                }, 10000);
+            } catch (stopError) {
+                console.error('Ошибка остановки polling:', stopError.message);
+            }
+        }
+        
+        if (errorCount >= maxErrors) {
+            console.error('Превышено максимальное количество ошибок. Бот отключен.');
+            return;
         }
     });
     
     bot.on('polling_error', (error) => {
         console.error('Ошибка polling:', error.message);
+        // Не увеличиваем счетчик для polling_error, так как это может быть временная проблема
     });
     
     // Запуск polling с задержкой
@@ -192,17 +212,40 @@ function cleanupInactiveCodes() {
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
     
+    // Проверяем, есть ли активные сессии для этого пользователя
+    socket.on('reconnect', (data) => {
+        if (data && data.sessionToken) {
+            const db = loadDatabase();
+            const longTermSession = db.longTermSessions[data.sessionToken];
+            
+            if (longTermSession && longTermSession.expiresAt > Date.now()) {
+                // Обновляем socketId для существующей сессии
+                for (const [sessionId, session] of Object.entries(db.sessions)) {
+                    if (session.phone === longTermSession.phone && session.authorized) {
+                        session.socketId = socket.id;
+                        saveDatabase(db);
+                        console.log(`Обновлен socketId для сессии ${sessionId}`);
+                        
+                        socket.emit('alreadyAuthorized', {
+                            phone: session.phone,
+                            name: session.name
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    
     // Обработка отключения
     socket.on('disconnect', () => {
         console.log('Пользователь отключился:', socket.id);
         
-        // Очищаем сессию при отключении
+        // НЕ очищаем сессию при отключении - пользователь может переподключиться
+        // Сессии будут очищены только при явном выходе или по истечении времени
         const sessionData = getSessionBySocketId(socket.id);
         if (sessionData) {
-            const db = loadDatabase();
-            delete db.sessions[sessionData.sessionId];
-            saveDatabase(db);
-            console.log(`Сессия ${sessionData.sessionId} очищена при отключении`);
+            console.log(`Сессия ${sessionData.sessionId} сохранена для переподключения`);
         }
     });
 
