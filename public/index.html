@@ -7,8 +7,32 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+        }
+        
+        * {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
         .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-tertiary) 100%);
+            min-height: 100vh;
+        }
+        
+        .dark-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .phone-digit-container {
@@ -16,62 +40,87 @@
         }
         
         .phone-digit {
-            width: 50px;
-            height: 50px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
+            width: 60px;
+            height: 60px;
+            border: 2px solid var(--bg-tertiary);
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
-            font-weight: 600;
-            color: #374151;
-            background: white;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            background: var(--bg-secondary);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             user-select: none;
             position: relative;
             overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         }
         
         .phone-digit:hover {
-            border-color: #3b82f6;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            border-color: var(--accent-primary);
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+            background: var(--bg-tertiary);
         }
         
         .phone-digit.active {
-            border-color: #3b82f6;
-            background: #3b82f6;
+            border-color: var(--accent-primary);
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             color: white;
-            transform: scale(1.05);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transform: scale(1.1);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6);
         }
         
         .phone-digit.filled {
-            border-color: #10b981;
-            background: #10b981;
+            border-color: var(--success);
+            background: linear-gradient(135deg, var(--success), #059669);
             color: white;
             animation: pulse 0.6s ease-in-out;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
         }
         
         .phone-digit.error {
-            border-color: #ef4444;
-            background: #fef2f2;
-            color: #dc2626;
+            border-color: var(--error);
+            background: linear-gradient(135deg, var(--error), #dc2626);
+            color: white;
             animation: shake 0.5s ease-in-out;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
         }
         
         @keyframes pulse {
             0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+            50% { transform: scale(1.15); }
             100% { transform: scale(1); }
         }
         
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
         }
         
         .phone-digit::before {
@@ -92,18 +141,20 @@
     </style>
 </head>
 <body class="gradient-bg min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+    <div class="dark-card rounded-3xl shadow-2xl p-8 w-full max-w-md text-center animate-slideIn">
         <!-- Logo -->
-        <div class="w-20 h-20 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl text-white">
+        <div class="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto mb-6 flex items-center justify-center text-3xl text-white shadow-lg animate-bounce">
             📱
         </div>
         
-        <h1 class="text-2xl font-bold text-gray-800 mb-6">Telegram Authorization</h1>
+        <h1 class="text-3xl font-bold text-white mb-8 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Telegram Authorization
+        </h1>
         
         <!-- Auth Form -->
         <div id="authForm" class="space-y-6">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-4 text-center">Номер телефона</label>
+                <label class="block text-lg font-semibold text-white mb-6 text-center">Номер телефона</label>
                 
                 <!-- Phone Input with Individual Digits -->
                 <div class="flex justify-center items-center space-x-2 mb-4">
@@ -176,64 +227,66 @@
             
             <button 
                 id="authBtn" 
-                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
-                Авторизоваться через Telegram
+                🚀 Авторизоваться через Telegram
             </button>
         </div>
 
         <!-- Code Form -->
-        <div id="codeForm" class="hidden space-y-4">
+        <div id="codeForm" class="hidden space-y-6">
             <div>
-                <label for="codeInput" class="block text-sm font-medium text-gray-700 mb-2">Код из Telegram</label>
+                <label for="codeInput" class="block text-lg font-semibold text-white mb-4">Код из Telegram</label>
                 <input 
                     type="text" 
                     id="codeInput" 
                     placeholder="Введите код" 
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    class="w-full px-6 py-4 bg-slate-700 border-2 border-slate-600 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-center text-2xl font-bold tracking-widest"
                 >
             </div>
-            <div class="flex space-x-3">
+            <div class="flex space-x-4">
                 <button 
                     id="verifyBtn" 
-                    class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
-                    Подтвердить код
+                    ✅ Подтвердить код
                 </button>
                 <button 
                     id="backBtn" 
-                    class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                    class="flex-1 bg-gradient-to-r from-gray-500 to-slate-600 hover:from-gray-600 hover:to-slate-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
                 >
-                    Назад
+                    ← Назад
                 </button>
             </div>
         </div>
 
         <!-- User Info -->
-        <div id="userInfo" class="hidden space-y-4">
-            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-green-800 mb-2">Добро пожаловать!</h3>
-                <p id="userPhone" class="text-green-700"></p>
-                <p id="userName" class="text-green-700"></p>
+        <div id="userInfo" class="hidden space-y-6">
+            <div class="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/30 rounded-2xl p-6 backdrop-blur-sm">
+                <h3 class="text-2xl font-bold text-green-400 mb-4 flex items-center justify-center">
+                    🎉 Добро пожаловать!
+                </h3>
+                <p id="userPhone" class="text-green-300 text-lg font-semibold mb-2"></p>
+                <p id="userName" class="text-green-300 text-lg font-semibold"></p>
             </div>
-            <div class="flex space-x-3">
+            <div class="flex space-x-4">
                 <button 
                     id="resetSessionBtn" 
-                    class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                    class="flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
                 >
-                    Сброс сессии
+                    🔄 Сброс сессии
                 </button>
                 <button 
                     id="logoutBtn" 
-                    class="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                    class="flex-1 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
                 >
-                    Выйти
+                    🚪 Выйти
                 </button>
             </div>
         </div>
 
         <!-- Status -->
-        <div id="status" class="hidden mt-4 p-4 rounded-lg text-sm font-medium"></div>
+        <div id="status" class="hidden mt-6 p-6 rounded-2xl text-lg font-semibold animate-fadeIn"></div>
     </div>
 
     <script>
@@ -450,17 +503,23 @@
         // Показать статус
         function showStatus(message, type) {
             status.textContent = message;
-            status.className = `mt-4 p-4 rounded-lg text-sm font-medium ${
-                type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
-                type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
-                type === 'info' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                'bg-gray-100 text-gray-800 border border-gray-200'
+            status.className = `mt-6 p-6 rounded-2xl text-lg font-semibold animate-fadeIn ${
+                type === 'success' ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-300 border-2 border-green-400/30' :
+                type === 'error' ? 'bg-gradient-to-r from-red-500/20 to-pink-500/20 text-red-300 border-2 border-red-400/30' :
+                type === 'info' ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-300 border-2 border-blue-400/30' :
+                'bg-gradient-to-r from-gray-500/20 to-slate-500/20 text-gray-300 border-2 border-gray-400/30'
             }`;
             status.classList.remove('hidden');
             
+            // Добавляем анимацию появления
+            status.style.animation = 'slideIn 0.5s ease-out';
+            
             if (type === 'success' || type === 'error') {
                 setTimeout(() => {
-                    status.classList.add('hidden');
+                    status.style.animation = 'fadeIn 0.5s ease-out reverse';
+                    setTimeout(() => {
+                        status.classList.add('hidden');
+                    }, 500);
                 }, 5000);
             }
         }
