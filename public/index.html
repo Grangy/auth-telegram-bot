@@ -230,11 +230,20 @@
         let authKey = null;
         let currentPhone = null;
         let isWaitingForCode = false;
+        let sessionToken = null;
 
         // Загрузка состояния из localStorage
         function loadState() {
             const savedPhone = localStorage.getItem('authPhone');
             const savedState = localStorage.getItem('authState');
+            const savedSessionToken = localStorage.getItem('sessionToken');
+            
+            if (savedSessionToken) {
+                sessionToken = savedSessionToken;
+                // Проверяем долгосрочную сессию при загрузке
+                socket.emit('checkAuth', { sessionToken: savedSessionToken });
+                return;
+            }
             
             if (savedPhone && savedState) {
                 currentPhone = savedPhone;
@@ -260,8 +269,23 @@
         function clearState() {
             localStorage.removeItem('authPhone');
             localStorage.removeItem('authState');
+            localStorage.removeItem('sessionToken');
             currentPhone = null;
             isWaitingForCode = false;
+            sessionToken = null;
+        }
+
+        // Сохранение долгосрочной сессии
+        function saveLongTermSession(token) {
+            localStorage.setItem('sessionToken', token);
+            sessionToken = token;
+        }
+
+        // Продление сессии
+        function extendSession() {
+            if (sessionToken) {
+                socket.emit('extendSession', { sessionToken: sessionToken });
+            }
         }
 
         // Показать форму ввода кода
@@ -471,8 +495,16 @@
             codeForm.classList.add('hidden');
             userInfo.classList.remove('hidden');
             
-            // Очищаем состояние при успешной авторизации
-            clearState();
+            // Сохраняем долгосрочную сессию
+            if (data.sessionToken) {
+                saveLongTermSession(data.sessionToken);
+                // Запускаем автоматическое продление сессии каждые 12 часов
+                setInterval(extendSession, 12 * 60 * 60 * 1000);
+            }
+            
+            // Очищаем временное состояние
+            localStorage.removeItem('authPhone');
+            localStorage.removeItem('authState');
             
             // Сбрасываем кнопки
             authBtn.disabled = false;
@@ -512,7 +544,15 @@
             userPhone.textContent = `Телефон: ${data.phone}`;
             userName.textContent = `Имя: ${data.name || 'Не указано'}`;
             authForm.classList.add('hidden');
+            codeForm.classList.add('hidden');
             userInfo.classList.remove('hidden');
+            
+            // Сохраняем токен сессии если он есть
+            if (data.sessionToken) {
+                saveLongTermSession(data.sessionToken);
+                // Запускаем автоматическое продление сессии каждые 12 часов
+                setInterval(extendSession, 12 * 60 * 60 * 1000);
+            }
         });
 
         socket.on('sessionReset', () => {
@@ -535,6 +575,18 @@
             showStatus(`Код отправлен в Telegram на номер ${data.phone}. Введите код ниже:`, 'info');
             saveState(data.phone, 'waitingForCode');
             showCodeForm();
+        });
+
+        socket.on('sessionExtended', (data) => {
+            if (data.success) {
+                console.log('Сессия успешно продлена');
+            } else {
+                console.log('Не удалось продлить сессию');
+                // При неудачном продлении очищаем сессию
+                clearState();
+                showAuthForm();
+                showStatus('Сессия истекла. Пожалуйста, авторизуйтесь заново.', 'info');
+            }
         });
 
         function showStatus(message, type) {

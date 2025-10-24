@@ -28,13 +28,69 @@ function loadDatabase() {
         const data = fs.readFileSync('database.json', 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        return { sessions: {}, authKeys: {}, users: {} };
+        return { sessions: {}, authKeys: {}, users: {}, longTermSessions: {} };
     }
 }
 
 // Сохранение базы данных
 function saveDatabase(db) {
     fs.writeFileSync('database.json', JSON.stringify(db, null, 2));
+}
+
+// Создание долгосрочной сессии
+function createLongTermSession(userData) {
+    const sessionToken = uuidv4();
+    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 часа
+    
+    const longTermSession = {
+        token: sessionToken,
+        phone: userData.phone,
+        name: userData.name,
+        telegramUserId: userData.telegramUserId,
+        createdAt: Date.now(),
+        expiresAt: expiresAt,
+        lastActivity: Date.now()
+    };
+    
+    return { sessionToken, longTermSession };
+}
+
+// Проверка долгосрочной сессии
+function validateLongTermSession(token) {
+    const db = loadDatabase();
+    const session = db.longTermSessions[token];
+    
+    if (!session) {
+        return null;
+    }
+    
+    // Проверяем, не истекла ли сессия
+    if (Date.now() > session.expiresAt) {
+        delete db.longTermSessions[token];
+        saveDatabase(db);
+        return null;
+    }
+    
+    // Обновляем время последней активности
+    session.lastActivity = Date.now();
+    saveDatabase(db);
+    
+    return session;
+}
+
+// Продление долгосрочной сессии
+function extendLongTermSession(token) {
+    const db = loadDatabase();
+    const session = db.longTermSessions[token];
+    
+    if (session) {
+        session.expiresAt = Date.now() + (24 * 60 * 60 * 1000); // Продлеваем на 24 часа
+        session.lastActivity = Date.now();
+        saveDatabase(db);
+        return true;
+    }
+    
+    return false;
 }
 
 // Получение сессии по socket ID
@@ -53,7 +109,21 @@ io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
     // Проверка существующей авторизации
-    socket.on('checkAuth', () => {
+    socket.on('checkAuth', (data) => {
+        // Проверяем долгосрочную сессию из localStorage
+        if (data && data.sessionToken) {
+            const longTermSession = validateLongTermSession(data.sessionToken);
+            if (longTermSession) {
+                socket.emit('alreadyAuthorized', {
+                    phone: longTermSession.phone,
+                    name: longTermSession.name,
+                    sessionToken: longTermSession.token
+                });
+                return;
+            }
+        }
+        
+        // Проверяем обычную сессию
         const sessionData = getSessionBySocketId(socket.id);
         if (sessionData && sessionData.session.authorized) {
             socket.emit('alreadyAuthorized', {
@@ -250,10 +320,22 @@ io.on('connection', (socket) => {
                     
                     saveDatabase(db);
                     
+                    // Создаем долгосрочную сессию
+                    const userData = {
+                        phone: phone,
+                        name: user.name,
+                        telegramUserId: user.telegramUserId
+                    };
+                    
+                    const { sessionToken, longTermSession } = createLongTermSession(userData);
+                    db.longTermSessions[sessionToken] = longTermSession;
+                    saveDatabase(db);
+                    
                     // Уведомляем клиент об успешной авторизации
                     socket.emit('authSuccess', {
                         phone: phone,
-                        name: user.name
+                        name: user.name,
+                        sessionToken: sessionToken
                     });
                     
                     console.log(`Авторизация по коду успешна для ${phone} (${user.name})`);
@@ -264,6 +346,19 @@ io.on('connection', (socket) => {
         
         // Если код не найден или неверный
         socket.emit('authError', 'Неверный код. Проверьте правильность ввода.');
+    });
+
+    // Продление долгосрочной сессии
+    socket.on('extendSession', (data) => {
+        if (data && data.sessionToken) {
+            const extended = extendLongTermSession(data.sessionToken);
+            if (extended) {
+                socket.emit('sessionExtended', { success: true });
+                console.log(`Сессия продлена для токена: ${data.sessionToken}`);
+            } else {
+                socket.emit('sessionExtended', { success: false });
+            }
+        }
     });
 
     // Обработка отключения
@@ -314,11 +409,23 @@ bot.on('contact', (msg) => {
                 
                 saveDatabase(db);
                 
-                // Уведомляем клиент об успешной авторизации
-                io.to(authData.socketId).emit('authSuccess', {
-                    phone: phoneNumber,
-                    name: userName
-                });
+                    // Создаем долгосрочную сессию
+                    const userData = {
+                        phone: phoneNumber,
+                        name: userName,
+                        telegramUserId: userId
+                    };
+                    
+                    const { sessionToken, longTermSession } = createLongTermSession(userData);
+                    db.longTermSessions[sessionToken] = longTermSession;
+                    saveDatabase(db);
+                    
+                    // Уведомляем клиент об успешной авторизации
+                    io.to(authData.socketId).emit('authSuccess', {
+                        phone: phoneNumber,
+                        name: userName,
+                        sessionToken: sessionToken
+                    });
                 
                 // Отправляем подтверждение в Telegram
                 bot.sendMessage(userId, `✅ Авторизация успешна! Добро пожаловать, ${userName}!`);
@@ -500,10 +607,22 @@ bot.on('message', (msg) => {
                     
                     saveDatabase(db);
                     
+                    // Создаем долгосрочную сессию
+                    const userData = {
+                        phone: phoneNumber,
+                        name: msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : ''),
+                        telegramUserId: userId
+                    };
+                    
+                    const { sessionToken, longTermSession } = createLongTermSession(userData);
+                    db.longTermSessions[sessionToken] = longTermSession;
+                    saveDatabase(db);
+                    
                     // Уведомляем клиент об успешной авторизации
                     io.to(authData.socketId).emit('authSuccess', {
                         phone: phoneNumber,
-                        name: msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')
+                        name: msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : ''),
+                        sessionToken: sessionToken
                     });
                     
                     // Отправляем подтверждение в Telegram
