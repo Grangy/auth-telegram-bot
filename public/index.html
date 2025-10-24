@@ -418,7 +418,9 @@
                 
                 // Live normalization after 4 characters
                 if (cleaned.length >= 4) {
+                    const beforeNormalization = cleaned;
                     cleaned = this.liveNormalizePhone(cleaned);
+                    console.log('🔄 Live normalization:', { before: beforeNormalization, after: cleaned });
                 }
                 
                 // Format for display
@@ -432,27 +434,36 @@
                 // Remove all non-digits except +
                 let cleaned = phone.replace(/[^\d+]/g, '');
                 
-                // Live normalization logic with smart detection
+                console.log('🔍 Live normalization check:', { original: phone, cleaned, length: cleaned.length });
+                
+                // Явные проверки для российских номеров
                 if (cleaned.startsWith('8') && cleaned.length >= 4) {
                     // 8XXXXXXXXXX -> +7XXXXXXXXXX
+                    console.log('✅ 8 -> +7 normalization');
                     cleaned = '+7' + cleaned.substring(1);
                 } else if (cleaned.startsWith('7') && !cleaned.startsWith('+7') && cleaned.length >= 4) {
                     // 7XXXXXXXXXX -> +7XXXXXXXXXX
+                    console.log('✅ 7 -> +7 normalization');
                     cleaned = '+' + cleaned;
-                } else if (cleaned.startsWith('9') && cleaned.length >= 4) {
-                    // 9XXXXXXXXX -> +79XXXXXXXXX (российский номер без кода страны)
-                    cleaned = '+7' + cleaned;
                 } else if (cleaned.startsWith('978') && cleaned.length >= 4) {
-                    // 978XXXXXXXX -> +7978XXXXXXXX (уже есть код 7, добавляем +)
+                    // 978XXXXXXXX -> +7978XXXXXXXX
+                    console.log('✅ 978 -> +7978 normalization');
                     cleaned = '+' + cleaned;
                 } else if (cleaned.startsWith('97') && cleaned.length >= 4) {
-                    // 97XXXXXXXX -> +797XXXXXXXX (российский номер без кода страны)
+                    // 97XXXXXXXX -> +797XXXXXXXX
+                    console.log('✅ 97 -> +797 normalization');
+                    cleaned = '+7' + cleaned;
+                } else if (cleaned.startsWith('9') && cleaned.length >= 4) {
+                    // 9XXXXXXXXX -> +79XXXXXXXXX
+                    console.log('✅ 9 -> +79 normalization');
                     cleaned = '+7' + cleaned;
                 } else if (cleaned.length >= 4 && !cleaned.startsWith('+')) {
                     // Любой другой номер -> добавляем +
+                    console.log('✅ Adding + prefix');
                     cleaned = '+' + cleaned;
                 }
                 
+                console.log('🎯 Normalization result:', { original: phone, result: cleaned });
                 return cleaned;
             }
         }
@@ -463,10 +474,14 @@
         // Format phone input with advanced handler and live normalization
         phoneInput.addEventListener('input', (e) => {
             const originalValue = e.target.value;
+            console.log('📝 Input event:', { original: originalValue, length: originalValue.length });
+            
             const formatted = phoneHandler.formatPhoneInput(originalValue);
+            console.log('🔄 Format result:', { original: originalValue, formatted });
             
             // Check if normalization occurred
             if (formatted !== originalValue && formatted.length >= 4) {
+                console.log('🎯 Normalization detected:', { original: originalValue, formatted });
                 // Show normalization indicator
                 showNormalizationIndicator(originalValue, formatted);
             }
