@@ -7,8 +7,22 @@ const config = {
     
     // Настройки базы данных
     database: {
-        path: 'database.json',
+        url: process.env.DATABASE_URL,
         backupPath: 'logs/backups'
+    },
+    
+    // Настройки Redis
+    redis: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379,
+        password: process.env.REDIS_PASSWORD,
+        ttl: {
+            user: 3600,        // 1 час
+            session: 3600,     // 1 час
+            authKey: 300,      // 5 минут
+            smsCode: 300,      // 5 минут
+            longTerm: 86400    // 24 часа
+        }
     },
     
     // Настройки сессий

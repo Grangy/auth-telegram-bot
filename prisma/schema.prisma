@@ -1,0 +1,93 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone         String   @unique
+  name          String?
+  telegramUserId String? @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastAuth      DateTime?
+  
+  // Relations
+  sessions      Session[]
+  longTermSessions LongTermSession[]
+  
+  @@map("users")
+}
+
+model Session {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  socketId      String   @unique
+  phone         String
+  authorized    Boolean  @default(false)
+  name          String?
+  telegramUserId String?
+  timestamp     DateTime @default(now())
+  expiresAt     DateTime
+  
+  // Relations
+  userId        String?  @db.ObjectId
+  user          User?    @relation(fields: [userId], references: [id])
+  
+  @@map("sessions")
+}
+
+model AuthKey {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  phone     String
+  socketId  String
+  used      Boolean  @default(false)
+  timestamp DateTime @default(now())
+  expiresAt DateTime
+  
+  @@map("auth_keys")
+}
+
+model LongTermSession {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  token         String   @unique
+  phone         String
+  name          String?
+  telegramUserId String?
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  
+  // Relations
+  userId        String?  @db.ObjectId
+  user          User?    @relation(fields: [userId], references: [id])
+  
+  @@map("long_term_sessions")
+}
+
+model SmsCode {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String   @unique
+  code      String
+  used      Boolean  @default(false)
+  socketId  String?
+  timestamp DateTime @default(now())
+  expiresAt DateTime
+  
+  @@map("sms_codes")
+}
+
+model CacheEntry {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  value     String
+  expiresAt DateTime
+  
+  @@map("cache_entries")
+}
