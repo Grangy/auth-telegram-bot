@@ -540,6 +540,21 @@
             clearState();
         });
 
+        socket.on('sessionReset', () => {
+            showStatus('Сессия сброшена. Введите код из Telegram для повторной авторизации.', 'info');
+            authForm.classList.add('hidden');
+            userInfo.classList.add('hidden');
+            codeForm.classList.remove('hidden');
+            phoneInput.value = '';
+            authBtn.disabled = false;
+            authBtn.textContent = 'Авторизоваться через Telegram';
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = 'Подтвердить код';
+            
+            // Очищаем состояние при сбросе сессии
+            clearState();
+        });
+
         socket.on('alreadyAuthorized', (data) => {
             userPhone.textContent = `Телефон: ${data.phone}`;
             userName.textContent = `Имя: ${data.name || 'Не указано'}`;
