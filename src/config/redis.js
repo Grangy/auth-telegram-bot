@@ -8,7 +8,21 @@ class RedisService {
         this.retryCount = 0;
         this.maxRetries = 5;
         
+        // Подавляем unhandled error events для Redis
+        this.setupErrorHandling();
         this.initializeRedis();
+    }
+
+    setupErrorHandling() {
+        // Подавляем unhandled error events от ioredis
+        const originalEmit = process.emit;
+        process.emit = function(event, ...args) {
+            if (event === 'unhandledRejection' && args[0] && args[0].message && args[0].message.includes('ECONNREFUSED')) {
+                console.warn('⚠️ Redis подключение недоступно, используем fallback');
+                return false;
+            }
+            return originalEmit.apply(this, arguments);
+        };
     }
 
     initializeRedis() {
@@ -25,13 +39,18 @@ class RedisService {
             this.client = new Redis({
                 ...redisConfig,
                 retryDelayOnFailover: 1000,
-                maxRetriesPerRequest: 3,
+                maxRetriesPerRequest: 1, // Уменьшаем количество попыток
                 lazyConnect: true,
-                connectTimeout: 5000,
-                commandTimeout: 5000,
+                connectTimeout: 3000, // Уменьшаем timeout
+                commandTimeout: 3000,
                 retryDelayOnClusterDown: 300,
                 enableReadyCheck: false,
-                maxRetriesPerRequest: null
+                maxRetriesPerRequest: 1, // Ограничиваем попытки
+                retryDelayOnFailover: 5000, // Увеличиваем задержку
+                maxRetriesPerRequest: 1,
+                // Отключаем автоматические попытки переподключения
+                enableAutoPipelining: false,
+                enableOfflineQueue: false
             });
 
             this.client.on('connect', () => {
@@ -46,6 +65,13 @@ class RedisService {
             });
 
             this.client.on('error', (error) => {
+                // Подавляем повторяющиеся ошибки подключения
+                if (error.code === 'ECONNREFUSED' && this.retryCount > 2) {
+                    console.warn('⚠️ Redis недоступен, используем fallback кэш');
+                    this.isConnected = false;
+                    return;
+                }
+                
                 console.warn('⚠️ Ошибка Redis (используем fallback):', error.message);
                 this.isConnected = false;
                 this.handleRedisError(error);
@@ -68,11 +94,18 @@ class RedisService {
     }
 
     handleRedisError(error) {
+        // Если это ошибка подключения и мы уже пытались несколько раз, не переподключаемся
+        if (error.code === 'ECONNREFUSED' && this.retryCount >= 2) {
+            console.warn('⚠️ Redis недоступен, используем fallback кэш. Переподключение отключено.');
+            return;
+        }
+
         if (this.retryCount < this.maxRetries) {
+            this.retryCount++;
             setTimeout(() => {
-                console.log(`🔄 Попытка переподключения к Redis (${this.retryCount + 1}/${this.maxRetries})`);
+                console.log(`🔄 Попытка переподключения к Redis (${this.retryCount}/${this.maxRetries})`);
                 this.initializeRedis();
-            }, 2000 * (this.retryCount + 1));
+            }, 5000 * this.retryCount); // Увеличиваем задержку
         } else {
             console.warn('⚠️ Максимальное количество попыток подключения к Redis исчерпано. Используем fallback кэш.');
         }
