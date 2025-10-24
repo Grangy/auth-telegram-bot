@@ -191,6 +191,19 @@ class CacheService {
             return false;
         }
     }
+
+    // Методы для защиты от дублирования обработки контактов
+    async getContactProcessingStatus(contactKey) {
+        return await this.redis.get(`contact_processing:${contactKey}`);
+    }
+
+    async setContactProcessingStatus(contactKey, status, ttl = 30) {
+        return await this.redis.set(`contact_processing:${contactKey}`, status, ttl);
+    }
+
+    async clearContactProcessingStatus(contactKey) {
+        return await this.redis.del(`contact_processing:${contactKey}`);
+    }
 }
 
 module.exports = CacheService;

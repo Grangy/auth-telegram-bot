@@ -682,6 +682,16 @@ function setupTelegramHandlers() {
         
         logger.info(`Получен контакт от пользователя ${userName} (${userId}): ${contact.phone_number}`);
         
+        // Защита от дублирования - проверяем, не обрабатывали ли мы уже этот контакт
+        const contactKey = `contact_${userId}_${contact.phone_number}`;
+        if (await cacheService.getContactProcessingStatus(contactKey)) {
+            logger.warn(`Контакт от пользователя ${userId} уже обрабатывается, пропускаем`);
+            return;
+        }
+        
+        // Помечаем контакт как обрабатываемый
+        await cacheService.setContactProcessingStatus(contactKey, true, 30); // 30 секунд
+        
         try {
             // Нормализуем номер телефона (поддержка всех вариантов российских номеров)
             const normalizedPhone = normalizePhoneNumber(contact.phone_number);
@@ -782,6 +792,9 @@ function setupTelegramHandlers() {
             await bot.sendMessage(userId, 
                 `❌ Произошла ошибка при обработке контакта. Попробуйте позже.`
             );
+        } finally {
+            // Очищаем статус обработки контакта
+            await cacheService.clearContactProcessingStatus(contactKey);
         }
     });
 }
