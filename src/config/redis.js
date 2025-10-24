@@ -8,16 +8,21 @@ class RedisService {
         this.retryCount = 0;
         this.maxRetries = 5;
         
-        // Проверяем, доступен ли Redis
+        // ВРЕМЕННО: Полностью отключаем Redis на деплое
+        // TODO: Включить Redis когда настроим Redis Cloud
+        console.log('⚠️ Redis временно отключен, используем только fallback кэш');
+        this.isConnected = false;
+        
+        // Закомментировано до настройки Redis Cloud
+        /*
         if (process.env.REDIS_URL || (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost')) {
-            // Только если Redis настроен для продакшена
             this.setupErrorHandling();
             this.initializeRedis();
         } else {
-            // Для локальной разработки без Redis используем только fallback
             console.log('⚠️ Redis не настроен, используем только fallback кэш');
             this.isConnected = false;
         }
+        */
     }
 
     setupErrorHandling() {
@@ -166,17 +171,7 @@ class RedisService {
     }
 
     async get(key) {
-        if (this.isConnected && this.client) {
-            try {
-                const value = await this.client.get(key);
-                return value ? JSON.parse(value) : null;
-            } catch (error) {
-                console.warn('⚠️ Ошибка получения из Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         const fallbackValue = this.fallbackCache.get(key);
         if (fallbackValue && fallbackValue.expiresAt > Date.now()) {
             return fallbackValue.data;
@@ -187,17 +182,7 @@ class RedisService {
     }
 
     async set(key, value, ttl = 3600) {
-        if (this.isConnected && this.client) {
-            try {
-                await this.client.setex(key, ttl, JSON.stringify(value));
-                return true;
-            } catch (error) {
-                console.warn('⚠️ Ошибка сохранения в Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         try {
             this.fallbackCache.set(key, {
                 data: value,
@@ -211,63 +196,26 @@ class RedisService {
     }
 
     async del(key) {
-        if (this.isConnected && this.client) {
-            try {
-                await this.client.del(key);
-            } catch (error) {
-                console.warn('⚠️ Ошибка удаления из Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         this.fallbackCache.delete(key);
         return true;
     }
 
     async exists(key) {
-        if (this.isConnected && this.client) {
-            try {
-                const result = await this.client.exists(key);
-                return result === 1;
-            } catch (error) {
-                console.warn('⚠️ Ошибка проверки существования в Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         const fallbackValue = this.fallbackCache.get(key);
         return fallbackValue && fallbackValue.expiresAt > Date.now();
     }
 
     async flush() {
-        if (this.isConnected && this.client) {
-            try {
-                await this.client.flushall();
-            } catch (error) {
-                console.warn('⚠️ Ошибка очистки Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         this.fallbackCache.clear();
         return true;
     }
 
     // Дополнительные методы для fallback кэша
     async getAllKeys() {
-        if (this.isConnected && this.client) {
-            try {
-                return await this.client.keys('*');
-            } catch (error) {
-                console.warn('⚠️ Ошибка получения ключей из Redis, используем fallback:', error.message);
-                this.isConnected = false;
-            }
-        }
-        
-        // Fallback to in-memory cache
+        // Всегда используем fallback кэш
         return Array.from(this.fallbackCache.keys());
     }
 
