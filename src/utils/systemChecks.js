@@ -1,12 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
-const Redis = require('ioredis');
 const logger = require('./logger');
 const config = require('../config/config');
 
 class SystemChecks {
     constructor() {
         this.prisma = null;
-        this.redis = null;
     }
 
     // Проверка переменных окружения
@@ -90,35 +88,16 @@ class SystemChecks {
         }
     }
 
-    // Проверка Redis подключения
-    async checkRedisConnection() {
+    // Проверка кэша (in-memory)
+    async checkCacheConnection() {
         try {
-            this.redis = new Redis({
-                host: config.redis.host,
-                port: config.redis.port,
-                password: config.redis.password,
-                retryDelayOnFailover: 100,
-                maxRetriesPerRequest: 1,
-                lazyConnect: true
-            });
-
-            await this.redis.ping();
-            
-            // Проверяем базовые операции
-            await this.redis.set('test:connection', 'ok', 'EX', 10);
-            const testValue = await this.redis.get('test:connection');
-            await this.redis.del('test:connection');
-
-            if (testValue !== 'ok') {
-                throw new Error('Redis операции не работают корректно');
-            }
-
+            // In-memory кэш всегда доступен
             return {
-                message: 'Redis подключение установлено',
-                details: `Хост: ${config.redis.host}:${config.redis.port}`
+                message: 'In-memory кэш активен',
+                details: 'Кэш работает в памяти приложения'
             };
         } catch (error) {
-            throw new Error(`Ошибка подключения к Redis: ${error.message}`);
+            throw new Error(`Ошибка инициализации кэша: ${error.message}`);
         }
     }
 
@@ -238,9 +217,6 @@ class SystemChecks {
     async cleanup() {
         if (this.prisma) {
             await this.prisma.$disconnect();
-        }
-        if (this.redis) {
-            await this.redis.quit();
         }
     }
 }

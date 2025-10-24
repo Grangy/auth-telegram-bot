@@ -79,7 +79,7 @@ app.get('/health', async (req, res) => {
             uptime: process.uptime(),
             services: {
                 database: false,
-                redis: false,
+                cache: false,
                 telegram: false
             }
         };
@@ -96,14 +96,14 @@ app.get('/health', async (req, res) => {
             health.services.database = false;
         }
 
-        // Проверка Redis
+        // Проверка кэша
         try {
             if (cacheService) {
                 const cacheStatus = cacheService.getCacheStatus();
-                health.services.redis = cacheStatus.isConnected;
+                health.services.cache = cacheStatus.isConnected;
             }
         } catch (error) {
-            health.services.redis = false;
+            health.services.cache = false;
         }
 
         // Проверка Telegram бота
@@ -837,9 +837,9 @@ async function startServer() {
         );
 
         startupChecklist.addCheck(
-            'Redis подключение',
-            () => systemChecks.checkRedisConnection(),
-            false // Redis не критичен
+            'In-memory кэш',
+            () => systemChecks.checkCacheConnection(),
+            false // Кэш не критичен
         );
 
         startupChecklist.addCheck(
@@ -883,9 +883,9 @@ async function startServer() {
         setTimeout(() => {
             const cacheStatus = cacheService.getCacheStatus();
             if (cacheStatus.isConnected) {
-                logger.info('✅ Redis кэш подключен');
+                logger.info('✅ In-memory кэш активен');
             } else {
-                logger.warn(`⚠️ Redis недоступен, используется fallback кэш (размер: ${cacheStatus.fallbackCacheSize})`);
+                logger.warn(`⚠️ Кэш недоступен (размер: ${cacheStatus.fallbackCacheSize})`);
             }
         }, 2000);
 

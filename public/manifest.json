@@ -1,0 +1,60 @@
+{
+  "name": "Telegram Authorization",
+  "short_name": "Telegram Auth",
+  "description": "Secure Telegram authorization system with auto-fill support",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0088cc",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["authentication", "security", "productivity"],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Auth",
+      "short_name": "Auth",
+      "description": "Quick authorization",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=org.telegram.messenger",
+      "id": "org.telegram.messenger"
+    },
+    {
+      "platform": "itunes",
+      "url": "https://apps.apple.com/app/telegram/id686449807"
+    }
+  ],
+  "prefer_related_applications": true
+}

@@ -1,208 +1,219 @@
-const RedisService = require('../config/redis');
 const logger = require('../utils/logger');
 
 class CacheService {
     constructor() {
-        this.redis = new RedisService();
+        this.cache = new Map(); // In-memory cache
         this.defaultTTL = 3600; // 1 час
         
-        // Периодическая очистка fallback кэша
+        // Периодическая очистка устаревших записей
         setInterval(() => {
-            this.redis.cleanupFallbackCache();
+            this.cleanupExpiredEntries();
         }, 5 * 60 * 1000); // каждые 5 минут
+        
+        logger.info('✅ In-memory кэш инициализирован');
     }
 
     // User cache
     async getUserByPhone(phone) {
         const key = `user:phone:${phone}`;
-        return await this.redis.get(key);
+        return this.get(key);
     }
 
     async setUserByPhone(phone, user, ttl = this.defaultTTL) {
         const key = `user:phone:${phone}`;
-        return await this.redis.set(key, user, ttl);
+        return this.set(key, user, ttl);
     }
 
     async getUserByTelegramId(telegramUserId) {
         const key = `user:telegram:${telegramUserId}`;
-        return await this.redis.get(key);
+        return this.get(key);
     }
 
     async setUserByTelegramId(telegramUserId, user, ttl = this.defaultTTL) {
         const key = `user:telegram:${telegramUserId}`;
-        return await this.redis.set(key, user, ttl);
-    }
-
-    async invalidateUser(phone, telegramUserId = null) {
-        const keys = [`user:phone:${phone}`];
-        if (telegramUserId) {
-            keys.push(`user:telegram:${telegramUserId}`);
-        }
-        
-        for (const key of keys) {
-            await this.redis.del(key);
-        }
+        return this.set(key, user, ttl);
     }
 
     // Session cache
-    async getSessionBySocketId(socketId) {
-        const key = `session:socket:${socketId}`;
-        return await this.redis.get(key);
+    async getSession(sessionId) {
+        const key = `session:${sessionId}`;
+        return this.get(key);
     }
 
-    async setSessionBySocketId(socketId, session, ttl = this.defaultTTL) {
-        const key = `session:socket:${socketId}`;
-        return await this.redis.set(key, session, ttl);
+    async setSession(sessionId, sessionData, ttl = this.defaultTTL) {
+        const key = `session:${sessionId}`;
+        return this.set(key, sessionData, ttl);
     }
 
-    async invalidateSession(socketId) {
-        const key = `session:socket:${socketId}`;
-        return await this.redis.del(key);
+    async deleteSession(sessionId) {
+        const key = `session:${sessionId}`;
+        return this.del(key);
     }
 
-    // Auth key cache
-    async getAuthKey(key) {
-        const cacheKey = `authkey:${key}`;
-        return await this.redis.get(cacheKey);
+    // Long-term session cache
+    async getLongTermSession(token) {
+        const key = `long_term_session:${token}`;
+        return this.get(key);
     }
 
-    async setAuthKey(key, authKeyData, ttl = 300) { // 5 минут
-        const cacheKey = `authkey:${key}`;
-        return await this.redis.set(cacheKey, authKeyData, ttl);
+    async setLongTermSession(token, sessionData, ttl = 24 * 3600) { // 24 часа
+        const key = `long_term_session:${token}`;
+        return this.set(key, sessionData, ttl);
     }
 
-    async invalidateAuthKey(key) {
-        const cacheKey = `authkey:${key}`;
-        return await this.redis.del(cacheKey);
+    async deleteLongTermSession(token) {
+        const key = `long_term_session:${token}`;
+        return this.del(key);
     }
 
     // SMS code cache
     async getSmsCode(phone) {
-        const key = `smscode:${phone}`;
-        return await this.redis.get(key);
+        const key = `sms_code:${phone}`;
+        return this.get(key);
     }
 
-    async setSmsCode(phone, smsCodeData, ttl = 300) { // 5 минут
-        const key = `smscode:${phone}`;
-        return await this.redis.set(key, smsCodeData, ttl);
+    async setSmsCode(phone, code, ttl = 300) { // 5 минут
+        const key = `sms_code:${phone}`;
+        return this.set(key, { code, timestamp: Date.now() }, ttl);
     }
 
-    async invalidateSmsCode(phone) {
-        const key = `smscode:${phone}`;
-        return await this.redis.del(key);
+    async deleteSmsCode(phone) {
+        const key = `sms_code:${phone}`;
+        return this.del(key);
     }
 
-    // Long term session cache
-    async getLongTermSession(token) {
-        const key = `longterm:${token}`;
-        return await this.redis.get(key);
+    // Auth key cache
+    async getAuthKey(key) {
+        const cacheKey = `auth_key:${key}`;
+        return this.get(cacheKey);
     }
 
-    async setLongTermSession(token, sessionData, ttl = 86400) { // 24 часа
-        const key = `longterm:${token}`;
-        return await this.redis.set(key, sessionData, ttl);
+    async setAuthKey(key, authData, ttl = 300) { // 5 минут
+        const cacheKey = `auth_key:${key}`;
+        return this.set(cacheKey, authData, ttl);
     }
 
-    async invalidateLongTermSession(token) {
-        const key = `longterm:${token}`;
-        return await this.redis.del(key);
+    async deleteAuthKey(key) {
+        const cacheKey = `auth_key:${key}`;
+        return this.del(cacheKey);
     }
 
-    // Generic cache operations
+    async invalidateAuthKey(key) {
+        return this.deleteAuthKey(key);
+    }
+
+    // Contact processing status
+    async getContactProcessingStatus(contactKey) {
+        const key = `contact_processing:${contactKey}`;
+        return this.get(key);
+    }
+
+    async setContactProcessingStatus(contactKey, status, ttl = 30) {
+        const key = `contact_processing:${contactKey}`;
+        return this.set(key, status, ttl);
+    }
+
+    async clearContactProcessingStatus(contactKey) {
+        const key = `contact_processing:${contactKey}`;
+        return this.del(key);
+    }
+
+    // Basic cache operations
     async get(key) {
-        return await this.redis.get(key);
+        const entry = this.cache.get(key);
+        if (!entry) return null;
+        
+        if (entry.expiresAt && Date.now() > entry.expiresAt) {
+            this.cache.delete(key);
+            return null;
+        }
+        
+        return entry.data;
     }
 
     async set(key, value, ttl = this.defaultTTL) {
-        return await this.redis.set(key, value, ttl);
+        const entry = {
+            data: value,
+            expiresAt: ttl ? Date.now() + (ttl * 1000) : null
+        };
+        this.cache.set(key, entry);
+        return true;
     }
 
     async del(key) {
-        return await this.redis.del(key);
+        this.cache.delete(key);
+        return true;
     }
 
     async exists(key) {
-        return await this.redis.exists(key);
+        const entry = this.cache.get(key);
+        if (!entry) return false;
+        
+        if (entry.expiresAt && Date.now() > entry.expiresAt) {
+            this.cache.delete(key);
+            return false;
+        }
+        
+        return true;
     }
 
     async flush() {
-        return await this.redis.flush();
+        this.cache.clear();
+        return true;
     }
 
-    // Cache warming
-    async warmUserCache(user) {
-        try {
-            await this.setUserByPhone(user.phone, user);
-            if (user.telegramUserId) {
-                await this.setUserByTelegramId(user.telegramUserId, user);
+    // Cleanup expired entries
+    cleanupExpiredEntries() {
+        const now = Date.now();
+        for (const [key, entry] of this.cache.entries()) {
+            if (entry.expiresAt && entry.expiresAt <= now) {
+                this.cache.delete(key);
             }
-            logger.debug(`Кэш пользователя ${user.phone} прогрет`);
-        } catch (error) {
-            logger.error('Ошибка прогрева кэша пользователя:', error);
-        }
-    }
-
-    async warmSessionCache(session) {
-        try {
-            await this.setSessionBySocketId(session.socketId, session);
-            logger.debug(`Кэш сессии ${session.socketId} прогрет`);
-        } catch (error) {
-            logger.error('Ошибка прогрева кэша сессии:', error);
         }
     }
 
     // Cache statistics
     async getStats() {
-        try {
-            if (this.redis.isConnected && this.redis.client) {
-                const info = await this.redis.client.info('memory');
-                return {
-                    memory: info,
-                    timestamp: new Date().toISOString()
-                };
-            } else {
-                return {
-                    memory: 'Fallback cache in use',
-                    fallbackCacheSize: this.redis.fallbackCache?.size || 0,
-                    timestamp: new Date().toISOString()
-                };
-            }
-        } catch (error) {
-            logger.error('Ошибка получения статистики кэша:', error);
-            return {
-                memory: 'Cache unavailable',
-                fallbackCacheSize: this.redis.fallbackCache?.size || 0,
-                timestamp: new Date().toISOString()
-            };
-        }
+        return {
+            size: this.cache.size,
+            memory: 'In-memory cache',
+            timestamp: new Date().toISOString()
+        };
     }
 
     // Получение статуса кэша
     getCacheStatus() {
-        return this.redis.getConnectionStatus();
+        return {
+            isConnected: true, // In-memory всегда доступен
+            retryCount: 0,
+            fallbackCacheSize: this.cache.size
+        };
     }
 
     // Проверка доступности кэша
     async isCacheAvailable() {
+        return true; // In-memory всегда доступен
+    }
+
+    // Warm cache for user
+    async warmUserCache(user) {
         try {
-            await this.redis.exists('health_check');
-            return true;
+            await this.setUserByPhone(user.phone, user);
+            await this.setUserByTelegramId(user.telegramUserId, user);
+            logger.info(`Кэш прогрелся для пользователя ${user.phone}`);
         } catch (error) {
-            return false;
+            logger.error('Ошибка прогрева кэша пользователя:', error);
         }
     }
 
-    // Методы для защиты от дублирования обработки контактов
-    async getContactProcessingStatus(contactKey) {
-        return await this.redis.get(`contact_processing:${contactKey}`);
-    }
-
-    async setContactProcessingStatus(contactKey, status, ttl = 30) {
-        return await this.redis.set(`contact_processing:${contactKey}`, status, ttl);
-    }
-
-    async clearContactProcessingStatus(contactKey) {
-        return await this.redis.del(`contact_processing:${contactKey}`);
+    // Warm cache for session
+    async warmSessionCache(session) {
+        try {
+            await this.setSession(session.socketId, session);
+            logger.info(`Кэш прогрелся для сессии ${session.socketId}`);
+        } catch (error) {
+            logger.error('Ошибка прогрева кэша сессии:', error);
+        }
     }
 }
 

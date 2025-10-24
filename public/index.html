@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Authorization</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#0088cc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Telegram Auth">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- iOS Icons -->
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -487,10 +501,136 @@
             }, 5000);
         }
         
-        // Show auth link
+        // Show auth link with smart device detection
         function showAuthLink(link) {
             authLink.textContent = link;
             linkModal.classList.remove('hidden');
+            
+            // Автоматически пытаемся открыть приложение
+            setTimeout(() => {
+                openTelegramApp(link);
+            }, 1000);
+        }
+        
+        // Smart Telegram app opening
+        function openTelegramApp(link) {
+            const userAgent = navigator.userAgent.toLowerCase();
+            const isIOS = /iphone|ipad|ipod/.test(userAgent);
+            const isAndroid = /android/.test(userAgent);
+            const isMobile = /mobile|android|iphone|ipad/.test(userAgent);
+            
+            if (isMobile) {
+                // Для мобильных устройств используем специальные схемы
+                if (isIOS) {
+                    openTelegramIOS(link);
+                } else if (isAndroid) {
+                    openTelegramAndroid(link);
+                } else {
+                    // Fallback для других мобильных устройств
+                    window.open(link, '_blank');
+                }
+            } else {
+                // Для десктопа показываем обычную ссылку
+                console.log('Desktop detected, showing link');
+            }
+        }
+        
+        // iOS Telegram opening with advanced detection
+        function openTelegramIOS(link) {
+            const tgScheme = link.replace('https://t.me/', 'tg://');
+            let appOpened = false;
+            
+            // Метод 1: Прямое открытие через location.href
+            try {
+                window.location.href = tgScheme;
+                appOpened = true;
+            } catch (e) {
+                console.log('Method 1 failed:', e);
+            }
+            
+            // Метод 2: Создание временной ссылки и клик
+            if (!appOpened) {
+                try {
+                    const tempLink = document.createElement('a');
+                    tempLink.href = tgScheme;
+                    tempLink.style.display = 'none';
+                    document.body.appendChild(tempLink);
+                    tempLink.click();
+                    document.body.removeChild(tempLink);
+                    appOpened = true;
+                } catch (e) {
+                    console.log('Method 2 failed:', e);
+                }
+            }
+            
+            // Метод 3: Iframe fallback
+            if (!appOpened) {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = tgScheme;
+                document.body.appendChild(iframe);
+                
+                setTimeout(() => {
+                    if (document.body.contains(iframe)) {
+                        document.body.removeChild(iframe);
+                    }
+                }, 1000);
+            }
+            
+            // Fallback на веб-версию через 3 секунды
+            setTimeout(() => {
+                if (!appOpened) {
+                    window.open(link, '_blank');
+                }
+            }, 3000);
+        }
+        
+        // Android Telegram opening with multiple methods
+        function openTelegramAndroid(link) {
+            const botUsername = link.split('/').pop();
+            let appOpened = false;
+            
+            // Метод 1: Intent URL с fallback
+            const intentUrl = `intent://t.me/${botUsername}#Intent;scheme=https;package=org.telegram.messenger;S.browser_fallback_url=${encodeURIComponent(link)};end`;
+            
+            try {
+                window.location.href = intentUrl;
+                appOpened = true;
+            } catch (e) {
+                console.log('Intent method failed:', e);
+            }
+            
+            // Метод 2: Прямой tg:// схема
+            if (!appOpened) {
+                try {
+                    const tgScheme = link.replace('https://t.me/', 'tg://');
+                    window.location.href = tgScheme;
+                    appOpened = true;
+                } catch (e) {
+                    console.log('TG scheme failed:', e);
+                }
+            }
+            
+            // Метод 3: Iframe с intent
+            if (!appOpened) {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = intentUrl;
+                document.body.appendChild(iframe);
+                
+                setTimeout(() => {
+                    if (document.body.contains(iframe)) {
+                        document.body.removeChild(iframe);
+                    }
+                }, 1000);
+            }
+            
+            // Fallback на веб-версию через 3 секунды
+            setTimeout(() => {
+                if (!appOpened) {
+                    window.open(link, '_blank');
+                }
+            }, 3000);
         }
         
         // Show link success with green checkmark
@@ -747,7 +887,23 @@
             } else {
                 console.log('sessionToken не найден в localStorage');
             }
+            
+            // Register Service Worker for PWA
+            registerServiceWorker();
         });
+        
+        // Register Service Worker for PWA
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            }
+        }
     </script>
 </body>
 </html>
