@@ -15,8 +15,52 @@ const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-// Инициализация Telegram бота
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// Инициализация Telegram бота с обработкой ошибок
+let bot;
+try {
+    bot = new TelegramBot(BOT_TOKEN, { 
+        polling: {
+            interval: 1000,
+            autoStart: false
+        }
+    });
+    
+    // Обработка ошибок бота
+    bot.on('error', (error) => {
+        console.error('Ошибка Telegram бота:', error.message);
+        if (error.message.includes('Conflict: terminated by other getUpdates request')) {
+            console.log('Перезапуск бота через 5 секунд...');
+            setTimeout(() => {
+                try {
+                    bot.stopPolling();
+                    setTimeout(() => {
+                        bot.startPolling();
+                    }, 2000);
+                } catch (restartError) {
+                    console.error('Ошибка перезапуска бота:', restartError.message);
+                }
+            }, 5000);
+        }
+    });
+    
+    bot.on('polling_error', (error) => {
+        console.error('Ошибка polling:', error.message);
+    });
+    
+    // Запуск polling с задержкой
+    setTimeout(() => {
+        try {
+            bot.startPolling();
+            console.log('Telegram бот запущен');
+        } catch (error) {
+            console.error('Ошибка запуска бота:', error.message);
+        }
+    }, 2000);
+    
+} catch (error) {
+    console.error('Критическая ошибка инициализации бота:', error.message);
+    process.exit(1);
+}
 
 // Middleware
 app.use(express.static('public'));
@@ -104,9 +148,63 @@ function getSessionBySocketId(socketId) {
     return null;
 }
 
+// Очистка старых сессий
+function cleanupOldSessions() {
+    const db = loadDatabase();
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 часа
+    
+    let cleaned = false;
+    for (const [sessionId, session] of Object.entries(db.sessions)) {
+        if (now - session.timestamp > maxAge) {
+            delete db.sessions[sessionId];
+            cleaned = true;
+        }
+    }
+    
+    if (cleaned) {
+        saveDatabase(db);
+        console.log('Очищены устаревшие сессии');
+    }
+}
+
+// Очистка неактивных кодов
+function cleanupInactiveCodes() {
+    const db = loadDatabase();
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 минут
+    
+    let cleaned = false;
+    for (const [phone, codeData] of Object.entries(db.smsCodes || {})) {
+        if (now - codeData.timestamp > maxAge) {
+            delete db.smsCodes[phone];
+            cleaned = true;
+        }
+    }
+    
+    if (cleaned) {
+        saveDatabase(db);
+        console.log('Очищены устаревшие коды');
+    }
+}
+
 // Обработка подключения Socket.IO
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
+    
+    // Обработка отключения
+    socket.on('disconnect', () => {
+        console.log('Пользователь отключился:', socket.id);
+        
+        // Очищаем сессию при отключении
+        const sessionData = getSessionBySocketId(socket.id);
+        if (sessionData) {
+            const db = loadDatabase();
+            delete db.sessions[sessionData.sessionId];
+            saveDatabase(db);
+            console.log(`Сессия ${sessionData.sessionId} очищена при отключении`);
+        }
+    });
 
     // Проверка существующей авторизации
     socket.on('checkAuth', (data) => {
@@ -692,6 +790,12 @@ server.listen(PORT, () => {
     console.log(`📱 Telegram бот активен`);
     console.log(`🌐 Откройте http://localhost:${PORT} в браузере`);
 });
+
+// Периодическая очистка старых данных
+setInterval(() => {
+    cleanupOldSessions();
+    cleanupInactiveCodes();
+}, 5 * 60 * 1000); // Каждые 5 минут
 
 // Обработка завершения процесса
 process.on('SIGINT', () => {

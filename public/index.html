@@ -4,215 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Authorization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .container {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-        }
-
-        .logo {
-            width: 80px;
-            height: 80px;
-            background: #0088cc;
-            border-radius: 50%;
-            margin: 0 auto 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            color: white;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 1rem;
-            font-size: 1.5rem;
-        }
-
-        .phone-input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e5e9;
-            border-radius: 8px;
-            font-size: 16px;
-            margin-bottom: 1rem;
-            transition: border-color 0.3s;
-        }
-
-        .phone-input:focus {
-            outline: none;
-            border-color: #0088cc;
-        }
-
-        .auth-btn {
-            background: #0088cc;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.3s;
-            width: 100%;
-            margin-bottom: 1rem;
-        }
-
-        .auth-btn:hover {
-            background: #006699;
-        }
-
-        .auth-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .logout-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.3s;
-            width: 100%;
-        }
-
-        .logout-btn:hover {
-            background: #c82333;
-        }
-
-        .reset-btn {
-            background: #ffc107;
-            color: #212529;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.3s;
-            width: 100%;
-            margin-bottom: 10px;
-        }
-
-        .reset-btn:hover {
-            background: #e0a800;
-        }
-
-        .back-btn {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.3s;
-            width: 100%;
-            margin-top: 10px;
-        }
-
-        .back-btn:hover {
-            background: #5a6268;
-        }
-
-        .status {
-            margin-top: 1rem;
-            padding: 10px;
-            border-radius: 8px;
-            font-weight: 500;
-        }
-
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .user-info {
-            background: #f8f9fa;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-
-        .user-info h3 {
-            color: #333;
-            margin-bottom: 0.5rem;
-        }
-
-        .user-info p {
-            color: #666;
-            margin-bottom: 0.25rem;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="logo">📱</div>
-        <h1>Авторизация через Telegram</h1>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+        <!-- Logo -->
+        <div class="w-20 h-20 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl text-white">
+            📱
+        </div>
         
-        <div id="authForm">
-            <input type="tel" id="phoneInput" class="phone-input" placeholder="Введите номер телефона" maxlength="15">
-            <button id="authBtn" class="auth-btn">Авторизоваться через Telegram</button>
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">Telegram Authorization</h1>
+        
+        <!-- Auth Form -->
+        <div id="authForm" class="space-y-4">
+            <div>
+                <label for="phoneInput" class="block text-sm font-medium text-gray-700 mb-2">Номер телефона</label>
+                <input 
+                    type="tel" 
+                    id="phoneInput" 
+                    placeholder="+7XXXXXXXXXX" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                >
+            </div>
+            <button 
+                id="authBtn" 
+                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                Авторизоваться через Telegram
+            </button>
         </div>
 
-        <div id="codeForm" class="hidden">
-            <input type="text" id="codeInput" class="phone-input" placeholder="Введите код из Telegram" maxlength="4">
-            <button id="verifyBtn" class="auth-btn">Подтвердить код</button>
-            <button id="backBtn" class="back-btn">← Назад к номеру</button>
+        <!-- Code Form -->
+        <div id="codeForm" class="hidden space-y-4">
+            <div>
+                <label for="codeInput" class="block text-sm font-medium text-gray-700 mb-2">Код из Telegram</label>
+                <input 
+                    type="text" 
+                    id="codeInput" 
+                    placeholder="Введите код" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                >
+            </div>
+            <div class="flex space-x-3">
+                <button 
+                    id="verifyBtn" 
+                    class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Подтвердить код
+                </button>
+                <button 
+                    id="backBtn" 
+                    class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                    Назад
+                </button>
+            </div>
         </div>
 
-        <div id="userInfo" class="user-info hidden">
-            <h3>Добро пожаловать!</h3>
-            <p id="userPhone"></p>
-            <p id="userName"></p>
-            <button id="resetSessionBtn" class="reset-btn">Сброс сессии</button>
-            <button id="logoutBtn" class="logout-btn">Выйти</button>
+        <!-- User Info -->
+        <div id="userInfo" class="hidden space-y-4">
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 class="text-lg font-semibold text-green-800 mb-2">Добро пожаловать!</h3>
+                <p id="userPhone" class="text-green-700"></p>
+                <p id="userName" class="text-green-700"></p>
+            </div>
+            <div class="flex space-x-3">
+                <button 
+                    id="resetSessionBtn" 
+                    class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                    Сброс сессии
+                </button>
+                <button 
+                    id="logoutBtn" 
+                    class="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                    Выйти
+                </button>
+            </div>
         </div>
 
-        <div id="status" class="status hidden"></div>
+        <!-- Status -->
+        <div id="status" class="hidden mt-4 p-4 rounded-lg text-sm font-medium"></div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+        
+        // DOM Elements
         const authForm = document.getElementById('authForm');
         const codeForm = document.getElementById('codeForm');
         const userInfo = document.getElementById('userInfo');
@@ -230,39 +115,16 @@
         let authKey = null;
         let currentPhone = null;
         let isWaitingForCode = false;
-        let sessionToken = null;
 
-        // Загрузка состояния из localStorage
-        function loadState() {
-            const savedPhone = localStorage.getItem('authPhone');
-            const savedState = localStorage.getItem('authState');
-            const savedSessionToken = localStorage.getItem('sessionToken');
-            
-            if (savedSessionToken) {
-                sessionToken = savedSessionToken;
-                // Проверяем долгосрочную сессию при загрузке
-                socket.emit('checkAuth', { sessionToken: savedSessionToken });
-                return;
-            }
-            
-            if (savedPhone && savedState) {
-                currentPhone = savedPhone;
-                phoneInput.value = savedPhone;
-                
-                if (savedState === 'waitingForCode') {
-                    isWaitingForCode = true;
-                    showCodeForm();
-                }
-            }
-        }
-
-        // Сохранение состояния в localStorage
+        // Сохранение состояния
         function saveState(phone, state) {
-            if (phone) {
-                localStorage.setItem('authPhone', phone);
-                currentPhone = phone;
-            }
-            localStorage.setItem('authState', state);
+            const stateData = {
+                phone: phone,
+                state: state,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('authState', JSON.stringify(stateData));
+            localStorage.setItem('authPhone', phone);
         }
 
         // Очистка состояния
@@ -272,56 +134,46 @@
             localStorage.removeItem('sessionToken');
             currentPhone = null;
             isWaitingForCode = false;
-            sessionToken = null;
-        }
-
-        // Сохранение долгосрочной сессии
-        function saveLongTermSession(token) {
-            localStorage.setItem('sessionToken', token);
-            sessionToken = token;
-        }
-
-        // Продление сессии
-        function extendSession() {
-            if (sessionToken) {
-                socket.emit('extendSession', { sessionToken: sessionToken });
-            }
-        }
-
-        // Показать форму ввода кода
-        function showCodeForm() {
-            authForm.classList.add('hidden');
-            codeForm.classList.remove('hidden');
-            codeInput.focus();
         }
 
         // Показать форму авторизации
         function showAuthForm() {
             authForm.classList.remove('hidden');
             codeForm.classList.add('hidden');
-            phoneInput.focus();
+            userInfo.classList.add('hidden');
         }
 
-        // Загружаем состояние при загрузке страницы
-        loadState();
+        // Показать форму кода
+        function showCodeForm() {
+            authForm.classList.add('hidden');
+            codeForm.classList.remove('hidden');
+            userInfo.classList.add('hidden');
+        }
 
-        // Форматирование номера телефона
-        phoneInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.startsWith('7')) {
-                value = '+' + value;
-            } else if (value.startsWith('8')) {
-                value = '+7' + value.substring(1);
-            } else if (value && !value.startsWith('+')) {
-                value = '+' + value;
+        // Показать информацию пользователя
+        function showUserInfo() {
+            authForm.classList.add('hidden');
+            codeForm.classList.add('hidden');
+            userInfo.classList.remove('hidden');
+        }
+
+        // Показать статус
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `mt-4 p-4 rounded-lg text-sm font-medium ${
+                type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
+                type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
+                type === 'info' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                'bg-gray-100 text-gray-800 border border-gray-200'
+            }`;
+            status.classList.remove('hidden');
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    status.classList.add('hidden');
+                }, 5000);
             }
-            e.target.value = value;
-        });
-
-        // Проверка авторизации при загрузке
-        socket.on('connect', () => {
-            socket.emit('checkAuth');
-        });
+        }
 
         // Обработка авторизации
         authBtn.addEventListener('click', () => {
@@ -330,20 +182,40 @@
                 showStatus('Введите номер телефона', 'error');
                 return;
             }
-
-            if (!phone.match(/^\+[1-9]\d{1,14}$/)) {
-                showStatus('Введите корректный номер телефона', 'error');
+            
+            if (!phone.startsWith('+')) {
+                showStatus('Номер должен начинаться с +', 'error');
                 return;
             }
 
-            // Сохраняем номер и состояние
-            saveState(phone, 'requesting');
-            
             authBtn.disabled = true;
-            authBtn.textContent = 'Ожидание...';
-            showStatus('Отправка запроса на авторизацию...', 'info');
-
+            authBtn.textContent = 'Отправка запроса...';
+            
             socket.emit('requestAuth', { phone });
+        });
+
+        // Обработка подтверждения кода
+        verifyBtn.addEventListener('click', () => {
+            const code = codeInput.value.trim();
+            if (!code) {
+                showStatus('Введите код', 'error');
+                return;
+            }
+
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Проверка...';
+            
+            socket.emit('verifyCode', { 
+                phone: currentPhone, 
+                code: code 
+            });
+        });
+
+        // Обработка кнопки "Назад"
+        backBtn.addEventListener('click', () => {
+            showAuthForm();
+            clearState();
+            showStatus('Введите номер телефона для авторизации', 'info');
         });
 
         // Обработка выхода
@@ -356,166 +228,32 @@
             socket.emit('resetSession');
         });
 
-        // Обработка подтверждения кода
-        verifyBtn.addEventListener('click', () => {
-            const code = codeInput.value.trim();
-            if (!code) {
-                showStatus('Введите код', 'error');
-                return;
-            }
-
-            if (!code.match(/^\d{4}$/)) {
-                showStatus('Код должен содержать 4 цифры', 'error');
-                return;
-            }
-
-            // Сохраняем состояние ожидания проверки
-            saveState(null, 'verifying');
-            
-            verifyBtn.disabled = true;
-            verifyBtn.textContent = 'Проверка...';
-            showStatus('Проверка кода...', 'info');
-
-            socket.emit('verifyCode', { code });
-        });
-
-        // Обработка Enter в поле кода
-        codeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                verifyBtn.click();
-            }
-        });
-
-        // Обработка кнопки "Назад"
-        backBtn.addEventListener('click', () => {
-            showAuthForm();
-            clearState();
-            showStatus('Введите номер телефона для авторизации', 'info');
-        });
-
         // Socket события
         socket.on('authKey', (data) => {
             authKey = data.key;
-            const link = data.link;
-            const qrCode = data.qrCode;
-            
-            if (qrCode) {
-                // Показываем QR-код
-                showStatus(`Отсканируйте QR-код для авторизации в Telegram:`, 'info');
-                
-                // Создаем контейнер для QR-кода
-                const qrContainer = document.createElement('div');
-                qrContainer.style.cssText = `
-                    text-align: center;
-                    margin-top: 20px;
-                    padding: 20px;
-                    background: white;
-                    border-radius: 15px;
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                `;
-                
-                // Создаем QR-код изображение
-                const qrImage = document.createElement('img');
-                qrImage.src = qrCode;
-                qrImage.style.cssText = `
-                    max-width: 250px;
-                    height: auto;
-                    border-radius: 10px;
-                    margin-bottom: 15px;
-                `;
-                
-                // Создаем инструкцию
-                const instruction = document.createElement('p');
-                instruction.textContent = 'Отсканируйте QR-код камерой телефона или нажмите на ссылку ниже';
-                instruction.style.cssText = `
-                    color: #666;
-                    font-size: 14px;
-                    margin-bottom: 15px;
-                `;
-                
-                // Создаем кнопку-ссылку
-                const linkButton = document.createElement('a');
-                linkButton.href = link;
-                linkButton.target = '_blank';
-                linkButton.textContent = '🔗 Открыть в Telegram';
-                linkButton.style.cssText = `
-                    display: inline-block;
-                    background: #0088cc;
-                    color: white;
-                    padding: 12px 24px;
-                    border-radius: 8px;
-                    text-decoration: none;
-                    font-weight: bold;
-                    transition: background 0.3s;
-                `;
-                
-                linkButton.addEventListener('mouseenter', () => {
-                    linkButton.style.background = '#006699';
-                });
-                
-                linkButton.addEventListener('mouseleave', () => {
-                    linkButton.style.background = '#0088cc';
-                });
-                
-                // Собираем контейнер
-                qrContainer.appendChild(qrImage);
-                qrContainer.appendChild(instruction);
-                qrContainer.appendChild(linkButton);
-                
-                // Добавляем контейнер после статуса
-                status.parentNode.insertBefore(qrContainer, status.nextSibling);
-            } else {
-                // Fallback - только ссылка
-                showStatus(`Нажмите на ссылку для авторизации в Telegram:`, 'info');
-                
-                const linkButton = document.createElement('a');
-                linkButton.href = link;
-                linkButton.target = '_blank';
-                linkButton.textContent = '🔗 Открыть в Telegram';
-                linkButton.style.cssText = `
-                    display: inline-block;
-                    background: #0088cc;
-                    color: white;
-                    padding: 12px 24px;
-                    border-radius: 8px;
-                    text-decoration: none;
-                    margin-top: 10px;
-                    font-weight: bold;
-                `;
-                
-                status.parentNode.insertBefore(linkButton, status.nextSibling);
-            }
+            showStatus('Ссылка для авторизации отправлена в Telegram', 'info');
+            showCodeForm();
+            currentPhone = phoneInput.value;
+            isWaitingForCode = true;
+            saveState(currentPhone, 'waitingForCode');
         });
 
         socket.on('authSuccess', (data) => {
             showStatus('Авторизация успешна!', 'success');
             userPhone.textContent = `Телефон: ${data.phone}`;
             userName.textContent = `Имя: ${data.name || 'Не указано'}`;
-            authForm.classList.add('hidden');
-            codeForm.classList.add('hidden');
-            userInfo.classList.remove('hidden');
+            showUserInfo();
             
-            // Сохраняем долгосрочную сессию
+            // Сохраняем токен сессии
             if (data.sessionToken) {
-                saveLongTermSession(data.sessionToken);
-                // Запускаем автоматическое продление сессии каждые 12 часов
-                setInterval(extendSession, 12 * 60 * 60 * 1000);
+                localStorage.setItem('sessionToken', data.sessionToken);
             }
             
-            // Очищаем временное состояние
-            localStorage.removeItem('authPhone');
-            localStorage.removeItem('authState');
-            
-            // Сбрасываем кнопки
-            authBtn.disabled = false;
-            authBtn.textContent = 'Авторизоваться через Telegram';
-            verifyBtn.disabled = false;
-            verifyBtn.textContent = 'Подтвердить код';
-            codeInput.value = '';
+            clearState();
         });
 
-        socket.on('authError', (message) => {
-            showStatus(message, 'error');
+        socket.on('authError', (data) => {
+            showStatus(data.message || 'Ошибка авторизации', 'error');
             authBtn.disabled = false;
             authBtn.textContent = 'Авторизоваться через Telegram';
             verifyBtn.disabled = false;
@@ -561,22 +299,15 @@
             authForm.classList.add('hidden');
             codeForm.classList.add('hidden');
             userInfo.classList.remove('hidden');
-            
-            // Сохраняем токен сессии если он есть
-            if (data.sessionToken) {
-                saveLongTermSession(data.sessionToken);
-                // Запускаем автоматическое продление сессии каждые 12 часов
-                setInterval(extendSession, 12 * 60 * 60 * 1000);
-            }
+            showStatus('Вы уже авторизованы', 'success');
         });
 
-        socket.on('sessionReset', () => {
-            showStatus('Сессия сброшена. Введите номер телефона для повторной авторизации.', 'info');
+        socket.on('sessionExpired', () => {
+            showStatus('Сессия истекла. Пожалуйста, авторизуйтесь заново.', 'info');
             authForm.classList.remove('hidden');
-            codeForm.classList.add('hidden');
             userInfo.classList.add('hidden');
+            codeForm.classList.add('hidden');
             phoneInput.value = '';
-            codeInput.value = '';
             authBtn.disabled = false;
             authBtn.textContent = 'Авторизоваться через Telegram';
             verifyBtn.disabled = false;
@@ -604,17 +335,42 @@
             }
         });
 
-        function showStatus(message, type) {
-            status.textContent = message;
-            status.className = `status ${type}`;
-            status.classList.remove('hidden');
-            
-            if (type === 'success' || type === 'error') {
-                setTimeout(() => {
-                    status.classList.add('hidden');
-                }, 5000);
+        // Обработка ошибок соединения
+        socket.on('connect_error', (error) => {
+            showStatus('Ошибка соединения с сервером', 'error');
+        });
+
+        socket.on('disconnect', () => {
+            showStatus('Соединение с сервером потеряно', 'error');
+        });
+
+        // Проверка состояния при загрузке
+        window.addEventListener('load', () => {
+            const savedState = localStorage.getItem('authState');
+            if (savedState) {
+                try {
+                    const stateData = JSON.parse(savedState);
+                    const now = Date.now();
+                    const stateAge = now - stateData.timestamp;
+                    
+                    // Если состояние старше 10 минут, очищаем его
+                    if (stateAge > 10 * 60 * 1000) {
+                        clearState();
+                        return;
+                    }
+                    
+                    if (stateData.state === 'waitingForCode') {
+                        currentPhone = stateData.phone;
+                        phoneInput.value = currentPhone;
+                        showCodeForm();
+                        showStatus('Введите код из Telegram', 'info');
+                    }
+                } catch (error) {
+                    console.error('Ошибка восстановления состояния:', error);
+                    clearState();
+                }
             }
-        }
+        });
     </script>
 </body>
 </html>
